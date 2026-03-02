@@ -9,7 +9,7 @@ A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Met
 | Feature | wttrbar | meteobar |
 |---|---|---|
 | API reliability | wttr.in (frequent downtime) | Open-Meteo (stable, no limits) |
-| Offline fallback | None | Disk cache with stale indicator |
+| Location disambiguation | None | Smart geocoding (City, Province, Country) |
 | Day/night icons | No | Automatic (current weather) |
 | Format customization | Fixed flags | Template strings with placeholders |
 | CSS classes | No | Weather-condition based |
@@ -53,7 +53,8 @@ That's it. You'll see something like `󰖐 23°` in your bar with a full forecas
 meteobar [OPTIONS]
 
 Options:
-  --location <NAME>            City name (e.g., "Buenos Aires"). Auto-detects by IP if omitted.
+  --location <NAME>            City name, "City, Province", "City, Country", or "auto" for IP geolocation.
+                               Auto-detects by IP if omitted.
   --lat <FLOAT>                Latitude (requires --lon)
   --lon <FLOAT>                Longitude (requires --lat)
   --city-name <NAME>           Display name for the location (used with --lat/--lon)
@@ -63,8 +64,6 @@ Options:
   --hours <N>                  Forecast hours in tooltip (0-24) [default: 0]
   --units <UNITS>              Unit system: metric, imperial [default: metric]
   --icons <SET>                Icon set for bar text: nerd, weather, emoji, fontawesome [default: nerd]
-  --cache-dir <PATH>           Cache directory [default: ~/.cache/meteobar]
-  --no-cache                   Disable cache
   --timeout <SECS>             HTTP timeout in seconds (1-60) [default: 10]
   --version                    Print version
   --help                       Print help
@@ -128,10 +127,7 @@ meteobar emits CSS classes you can use in `style.css`:
 | `snowy` | Snow |
 | `stormy` | Thunderstorm |
 | `foggy` | Fog / mist |
-| `stale` | Cached data (API unreachable) |
 | `error` | Total failure |
-
-Multiple classes can be active at once (e.g., `["cloudy", "stale"]`).
 
 ### Example CSS
 
@@ -140,7 +136,6 @@ Multiple classes can be active at once (e.g., `["cloudy", "stale"]`).
 #custom-meteobar.rainy { color: #81a1c1; }
 #custom-meteobar.snowy { color: #88c0d0; }
 #custom-meteobar.stormy { color: #bf616a; }
-#custom-meteobar.stale { opacity: 0.6; }
 ```
 
 ## Waybar Config Examples
@@ -182,7 +177,18 @@ Multiple classes can be active at once (e.g., `["cloudy", "stale"]`).
 
 ```jsonc
 "custom/meteobar": {
-    "exec": "meteobar",
+    "exec": "meteobar --location auto",
+    "return-type": "json",
+    "interval": 900,
+    "tooltip": true
+}
+```
+
+### Location with province/country disambiguation
+
+```jsonc
+"custom/meteobar": {
+    "exec": "meteobar --location 'Avellaneda, Buenos Aires'",
     "return-type": "json",
     "interval": 900,
     "tooltip": true
@@ -192,10 +198,10 @@ Multiple classes can be active at once (e.g., `["cloudy", "stale"]`).
 ## How It Works
 
 1. Resolves location (from `--location`, `--lat/--lon`, or auto-detect by IP via [ipapi.co](https://ipapi.co/))
+   - Supports `"City, Province"`, `"City, Country"`, `"City, CC"` (ISO country code) for disambiguation
+   - `--location auto` explicitly uses IP geolocation
 2. Fetches weather data from [Open-Meteo](https://open-meteo.com/) (free, no API key)
-3. Caches the response to `~/.cache/meteobar/last.json`
-4. If the API is unreachable, falls back to cached data (with `stale` CSS class)
-5. Outputs JSON that Waybar consumes (`text`, `tooltip`, `class`, `alt`)
+3. Outputs JSON that Waybar consumes (`text`, `tooltip`, `class`, `alt`)
 
 **Note:** The tooltip always uses Nerd Font icons for consistent monospace alignment, regardless of the `--icons` setting. The `--icons` flag controls the bar text only.
 

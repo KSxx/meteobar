@@ -70,20 +70,41 @@ struct GeocodingResult {
     name: String,
     latitude: f64,
     longitude: f64,
+    #[serde(default)]
+    admin1: Option<String>,
+    #[serde(default)]
+    admin2: Option<String>,
+    #[serde(default)]
+    admin3: Option<String>,
+    #[serde(default)]
+    admin4: Option<String>,
+    #[serde(default)]
+    country: Option<String>,
+    #[serde(default)]
+    country_code: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct IpApiResponse {
+struct IpGeoResponse {
+    success: bool,
     latitude: f64,
     longitude: f64,
     city: String,
+    #[serde(default)]
+    region: Option<String>,
+    #[serde(default)]
+    country_code: Option<String>,
 }
 
-pub fn geocode(client: &Client, city: &str) -> Result<ResolvedLocation, String> {
+pub fn geocode(client: &Client, location: &str) -> Result<ResolvedLocation, String> {
+    let (search_name, qualifiers) = parse_location(location);
+
+    let count = if qualifiers.is_empty() { 1 } else { 5 };
     let url = format!(
-        "https://geocoding-api.open-meteo.com/v1/search?name={}&count=1",
-        urlencoding(city)
+        "https://geocoding-api.open-meteo.com/v1/search?name={}&count={count}",
+        urlencoding(search_name)
     );
+
     let resp: GeocodingResponse = client
         .get(&url)
         .send()
@@ -93,16 +114,23 @@ pub fn geocode(client: &Client, city: &str) -> Result<ResolvedLocation, String> 
         .json()
         .map_err(|e| format!("geocoding parse failed: {e}"))?;
 
-    let result = resp
-        .results
-        .into_iter()
-        .next()
-        .ok_or_else(|| format!("no results for location '{city}'"))?;
+    if resp.results.is_empty() {
+        return Err(format!("no results for location '{location}'"));
+    }
+
+    let result = if qualifiers.is_empty() {
+        &resp.results[0]
+    } else {
+        resp.results
+            .iter()
+            .find(|r| matches_qualifier(r, &qualifiers))
+            .unwrap_or(&resp.results[0])
+    };
 
     Ok(ResolvedLocation {
         lat: result.latitude,
         lon: result.longitude,
-        city: result.name,
+        city: build_display_name(&result.name, result.admin1.as_deref(), result.country_code.as_deref()),
     })
 }
 
@@ -112,20 +140,81 @@ pub fn geolocate_ip(client: &Client) -> Result<ResolvedLocation, String> {
         .build()
         .unwrap_or_else(|_| client.clone());
 
-    let resp: IpApiResponse = geo_client
-        .get("https://ipapi.co/json/")
+    let resp: IpGeoResponse = geo_client
+        .get("https://ipwho.is/")
         .send()
         .map_err(|e| format!("IP geolocation failed: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("IP geolocation HTTP error: {e}"))?
         .json()
         .map_err(|e| format!("IP geolocation parse failed: {e}"))?;
+
+    if !resp.success {
+        return Err("IP geolocation lookup failed".into());
+    }
 
     Ok(ResolvedLocation {
         lat: resp.latitude,
         lon: resp.longitude,
-        city: resp.city,
+        city: build_display_name(&resp.city, resp.region.as_deref(), resp.country_code.as_deref()),
     })
+}
+
+fn parse_location(input: &str) -> (&str, Vec<&str>) {
+    match input.split_once(',') {
+        Some((city, rest)) => {
+            let city = city.trim();
+            if city.is_empty() {
+                return (input, Vec::new());
+            }
+            let qualifiers: Vec<&str> = rest
+                .split(',')
+                .map(|t| t.trim())
+                .filter(|t| !t.is_empty())
+                .collect();
+            if qualifiers.is_empty() {
+                (city, Vec::new())
+            } else {
+                (city, qualifiers)
+            }
+        }
+        None => (input, Vec::new()),
+    }
+}
+
+fn matches_qualifier(result: &GeocodingResult, qualifiers: &[&str]) -> bool {
+    qualifiers.iter().all(|token| {
+        if token.len() == 2 {
+            result
+                .country_code
+                .as_ref()
+                .is_some_and(|cc| cc.eq_ignore_ascii_case(token))
+        } else {
+            let t = token.to_lowercase();
+            [
+                &result.admin1,
+                &result.admin2,
+                &result.admin3,
+                &result.admin4,
+                &result.country,
+            ]
+            .iter()
+            .any(|field| field.as_ref().is_some_and(|v| v.to_lowercase().contains(&t)))
+        }
+    })
+}
+
+fn build_display_name(city: &str, admin1: Option<&str>, country_code: Option<&str>) -> String {
+    let mut parts = vec![city.to_string()];
+    if let Some(a) = admin1 {
+        if !a.is_empty() {
+            parts.push(a.to_string());
+        }
+    }
+    if let Some(cc) = country_code {
+        if !cc.is_empty() {
+            parts.push(cc.to_string());
+        }
+    }
+    parts.join(", ")
 }
 
 pub enum Units {

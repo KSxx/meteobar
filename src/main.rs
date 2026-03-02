@@ -1,17 +1,13 @@
 mod api;
-mod cache;
 mod format;
 mod icons;
 mod theme;
 mod waybar;
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
 
-use api::ResolvedLocation;
-use cache::CacheEntry;
 use format::FormatData;
 use icons::IconSet;
 use waybar::{TooltipFormat, WaybarOutput};
@@ -19,7 +15,7 @@ use waybar::{TooltipFormat, WaybarOutput};
 #[derive(Parser)]
 #[command(name = "meteobar", version, about = "Weather widget for Waybar using Open-Meteo")]
 struct Cli {
-    #[arg(long)]
+    #[arg(long, help = "City name, 'City, Province', 'City, Country', or 'auto' for IP geolocation")]
     location: Option<String>,
 
     #[arg(long, requires = "lon", allow_hyphen_values = true)]
@@ -49,12 +45,6 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = IconSet::Nerd)]
     icons: IconSet,
 
-    #[arg(long)]
-    cache_dir: Option<PathBuf>,
-
-    #[arg(long)]
-    no_cache: bool,
-
     #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u64).range(1..=60))]
     timeout: u64,
 }
@@ -68,15 +58,6 @@ enum CliUnits {
 fn main() {
     let cli = Cli::parse();
     let colors = theme::ThemeColors::load();
-
-    let cache_dir = cli
-        .cache_dir
-        .clone()
-        .unwrap_or_else(|| {
-            dirs::cache_dir()
-                .unwrap_or_else(|| PathBuf::from("/tmp"))
-                .join("meteobar")
-        });
 
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(cli.timeout))
@@ -93,94 +74,19 @@ fn main() {
         CliUnits::Imperial => "°F",
     };
 
-    let result = run_pipeline(&cli, &client, &units, &cache_dir);
-
-    match result {
-        PipelineResult::Fresh {
-            weather,
-            city,
-            lat,
-            lon,
-        } => {
-            if !cli.no_cache {
-                let entry = CacheEntry {
-                    weather: weather.clone(),
-                    city: city.clone(),
-                    location_query: cli.location.clone(),
-                    lat,
-                    lon,
-                    timestamp: chrono::Utc::now().timestamp(),
-                };
-                let _ = cache::save(&entry, &cache_dir);
-            }
-            let output = build_output(&weather, &city, &cli, unit_label, false, &colors);
-            print_and_exit(output);
-        }
-        PipelineResult::Stale { weather, city } => {
-            let output = build_output(&weather, &city, &cli, unit_label, true, &colors);
-            print_and_exit(output);
-        }
-        PipelineResult::Error(msg) => {
-            let output = waybar::error_output(&msg, &colors);
-            print_and_exit(output);
-        }
-    }
+    let output = match fetch_weather_pipeline(&cli, &client, &units) {
+        Ok((weather, city)) => build_output(&weather, &city, &cli, unit_label, &colors),
+        Err(msg) => waybar::error_output(&msg, &colors),
+    };
+    print_and_exit(output);
 }
 
-enum PipelineResult {
-    Fresh {
-        weather: api::WeatherData,
-        city: String,
-        lat: f64,
-        lon: f64,
-    },
-    Stale {
-        weather: api::WeatherData,
-        city: String,
-    },
-    Error(String),
-}
-
-fn run_pipeline(
+fn fetch_weather_pipeline(
     cli: &Cli,
     client: &reqwest::blocking::Client,
     units: &api::Units,
-    cache_dir: &std::path::Path,
-) -> PipelineResult {
-    let fresh = try_fresh(cli, client, units, cache_dir);
-
-    match fresh {
-        Ok(r) => PipelineResult::Fresh {
-            weather: r.weather,
-            city: r.city,
-            lat: r.lat,
-            lon: r.lon,
-        },
-        Err(_) if !cli.no_cache => match cache::load(cache_dir) {
-            Ok(entry) => PipelineResult::Stale {
-                weather: entry.weather,
-                city: entry.city,
-            },
-            Err(cache_err) => PipelineResult::Error(cache_err),
-        },
-        Err(e) => PipelineResult::Error(e),
-    }
-}
-
-struct FreshResult {
-    weather: api::WeatherData,
-    city: String,
-    lat: f64,
-    lon: f64,
-}
-
-fn try_fresh(
-    cli: &Cli,
-    client: &reqwest::blocking::Client,
-    units: &api::Units,
-    cache_dir: &std::path::Path,
-) -> Result<FreshResult, String> {
-    let location = resolve_location(cli, client, cache_dir)?;
+) -> Result<(api::WeatherData, String), String> {
+    let location = resolve_location(cli, client)?;
     let weather = api::fetch_weather(
         client,
         location.lat,
@@ -189,38 +95,30 @@ fn try_fresh(
         cli.hours,
         units,
     )?;
-    Ok(FreshResult {
-        weather,
-        city: location.city,
-        lat: location.lat,
-        lon: location.lon,
-    })
+    Ok((weather, location.city))
 }
 
 fn resolve_location(
     cli: &Cli,
     client: &reqwest::blocking::Client,
-    cache_dir: &std::path::Path,
-) -> Result<ResolvedLocation, String> {
+) -> Result<api::ResolvedLocation, String> {
     if let (Some(lat), Some(lon)) = (cli.lat, cli.lon) {
         let city = cli
             .city_name
             .clone()
             .unwrap_or_else(|| format!("{:.2},{:.2}", lat, lon));
-        return Ok(ResolvedLocation { lat, lon, city });
+        return Ok(api::ResolvedLocation { lat, lon, city });
     }
 
     if let Some(ref location) = cli.location {
-        if !cli.no_cache {
-            if let Some((lat, lon)) = cache::get_cached_location(cache_dir, location) {
-                return Ok(ResolvedLocation {
-                    lat,
-                    lon,
-                    city: location.clone(),
-                });
-            }
+        let trimmed = location.trim();
+        if trimmed.is_empty() {
+            return api::geolocate_ip(client);
         }
-        return api::geocode(client, location);
+        if trimmed.eq_ignore_ascii_case("auto") {
+            return api::geolocate_ip(client);
+        }
+        return api::geocode(client, trimmed);
     }
 
     api::geolocate_ip(client)
@@ -231,7 +129,6 @@ fn build_output(
     city: &str,
     cli: &Cli,
     unit_label: &str,
-    stale: bool,
     colors: &theme::ThemeColors,
 ) -> WaybarOutput {
     let icon_info = icons::get_icon(
@@ -266,7 +163,7 @@ fn build_output(
         wind_dir: format::degrees_to_cardinal(current.wind_direction_10m.unwrap_or(0.0))
             .to_string(),
         pressure: format!("{}", current.pressure_msl.unwrap_or(0.0).round() as i32),
-        city: city.to_string(),
+        city: waybar::pango_escape(city),
         min: format!(
             "{}",
             weather
@@ -293,7 +190,6 @@ fn build_output(
     let tooltip = waybar::build_tooltip(
         city,
         weather,
-        &cli.icons,
         &cli.tooltip_format,
         cli.days,
         cli.hours,
@@ -301,16 +197,10 @@ fn build_output(
         colors,
     );
 
-    let class = if stale {
-        vec!["stale".to_string()]
-    } else {
-        vec![]
-    };
-
     WaybarOutput {
         text,
         tooltip,
-        class,
+        class: vec![icon_info.css_class.to_string()],
         alt: icon_info.css_class.to_string(),
     }
 }

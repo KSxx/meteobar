@@ -123,7 +123,6 @@ fn content_width(items: &[&str]) -> usize {
 pub fn build_tooltip(
     city: &str,
     data: &WeatherData,
-    _icon_set: &IconSet,
     tooltip_format: &TooltipFormat,
     days: u8,
     hours: u8,
@@ -204,8 +203,14 @@ pub fn build_tooltip(
         Vec::new()
     };
 
+    let updated_line = format!(
+        "  {}  {}",
+        fg(c_dim, "󰅐"),
+        fg(c_dim, &chrono::Local::now().format("%H:%M").to_string()),
+    );
+
     // Phase 2: Calculate dynamic width from content
-    let mut measurable: Vec<&str> = vec![&temp_line, &stats1, &stats2];
+    let mut measurable: Vec<&str> = vec![&temp_line, &stats1, &stats2, &updated_line];
     for line in &hourly_lines {
         measurable.push(line);
     }
@@ -247,6 +252,8 @@ pub fn build_tooltip(
         }
     }
 
+    lines.push(separator(width, c_border, c_dim));
+    lines.push(border_line(&updated_line, width, c_border));
     lines.push(bottom_border(width, c_border));
     lines.join("\n")
 }
