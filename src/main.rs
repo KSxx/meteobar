@@ -1,4 +1,5 @@
 mod api;
+mod cache;
 mod format;
 mod icons;
 mod theme;
@@ -74,8 +75,14 @@ fn main() {
         CliUnits::Imperial => "°F",
     };
 
-    let output = match fetch_weather_pipeline(&cli, &client, &units) {
-        Ok((weather, city)) => build_output(&weather, &city, &cli, unit_label, &colors),
+    let cache = cache::Cache::new();
+    let output = match fetch_weather_pipeline(&cli, &client, &units, &cache) {
+        Ok((weather, city)) => {
+            let last_fetched = cache.last_fetched().map(|st| {
+                chrono::DateTime::<chrono::Local>::from(st)
+            });
+            build_output(&weather, &city, &cli, unit_label, &colors, last_fetched)
+        }
         Err(msg) => waybar::error_output(&msg, &colors),
     };
     print_and_exit(output);
@@ -85,17 +92,34 @@ fn fetch_weather_pipeline(
     cli: &Cli,
     client: &reqwest::blocking::Client,
     units: &api::Units,
+    cache: &cache::Cache,
 ) -> Result<(api::WeatherData, String), String> {
-    let location = resolve_location(cli, client)?;
-    let weather = api::fetch_weather(
-        client,
-        location.lat,
-        location.lon,
-        cli.days,
-        cli.hours,
-        units,
-    )?;
-    Ok((weather, location.city))
+    let json = cache.fetch_or_cached(|| {
+        let location = resolve_location(cli, client)?;
+        let weather = api::fetch_weather(
+            client,
+            location.lat,
+            location.lon,
+            cli.days,
+            cli.hours,
+            units,
+        )?;
+        let entry = CacheEntry {
+            weather,
+            city: location.city,
+        };
+        serde_json::to_string(&entry).map_err(|e| format!("cache serialize failed: {e}"))
+    })?;
+
+    let entry: CacheEntry =
+        serde_json::from_str(&json).map_err(|e| format!("cache parse failed: {e}"))?;
+    Ok((entry.weather, entry.city))
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CacheEntry {
+    weather: api::WeatherData,
+    city: String,
 }
 
 fn resolve_location(
@@ -130,6 +154,7 @@ fn build_output(
     cli: &Cli,
     unit_label: &str,
     colors: &theme::ThemeColors,
+    last_fetched: Option<chrono::DateTime<chrono::Local>>,
 ) -> WaybarOutput {
     let icon_info = icons::get_icon(
         weather.current.weather_code,
@@ -195,6 +220,7 @@ fn build_output(
         cli.hours,
         unit_label,
         colors,
+        last_fetched,
     );
 
     WaybarOutput {

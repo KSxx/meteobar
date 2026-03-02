@@ -128,6 +128,7 @@ pub fn build_tooltip(
     hours: u8,
     unit_label: &str,
     colors: &ThemeColors,
+    last_fetched: Option<chrono::DateTime<chrono::Local>>,
 ) -> String {
     let current = &data.current;
     let temp = current.temperature_2m.round() as i32;
@@ -203,10 +204,10 @@ pub fn build_tooltip(
         Vec::new()
     };
 
+    let updated_time = last_fetched.unwrap_or_else(chrono::Local::now);
     let updated_line = format!(
-        "  {}  {}",
-        fg(c_dim, "󰅐"),
-        fg(c_dim, &chrono::Local::now().format("%H:%M").to_string()),
+        "  {}",
+        fg(c_dim, &format!("󰅐  Updated {}", updated_time.format("%H:%M"))),
     );
 
     // Phase 2: Calculate dynamic width from content
