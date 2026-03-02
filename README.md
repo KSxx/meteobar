@@ -197,7 +197,7 @@ meteobar emits CSS classes you can use in `style.css`:
 
 ## How It Works
 
-1. Resolves location (from `--location`, `--lat/--lon`, or auto-detect by IP via [ipapi.co](https://ipapi.co/))
+1. Resolves location (from `--location`, `--lat/--lon`, or auto-detect by IP via [ipwho.is](https://ipwho.is/))
    - Supports `"City, Province"`, `"City, Country"`, `"City, CC"` (ISO country code) for disambiguation
    - `--location auto` explicitly uses IP geolocation
 2. Fetches weather data from [Open-Meteo](https://open-meteo.com/) (free, no API key)
