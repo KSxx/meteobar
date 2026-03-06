@@ -138,6 +138,17 @@ meteobar emits CSS classes you can use in `style.css`:
 #custom-meteobar.stormy { color: #bf616a; }
 ```
 
+### Spacing
+
+Adjust padding and margin to control spacing around the widget:
+
+```css
+#custom-meteobar {
+    padding: 0 8px;
+    margin: 0 4px;
+}
+```
+
 ## Waybar Config Examples
 
 ### Minimal
