@@ -1,5 +1,8 @@
 # meteobar
 
+[![AUR version](https://img.shields.io/aur/version/meteobar)](https://aur.archlinux.org/packages/meteobar)
+[![License: MIT](https://img.shields.io/github/license/mryll/meteobar)](LICENSE)
+
 A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Meteo](https://open-meteo.com/). No API key required.
 
 ![screenshot](screenshot.png)
@@ -226,6 +229,23 @@ Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise)
 
 **Note:** The tooltip always uses Nerd Font icons for consistent monospace alignment, regardless of the `--icons` setting. The `--icons` flag controls the bar text only.
 
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No output | Location not resolved | Check `--location` spelling, try `"City, Country"` format |
+| Stale data | API timeout | Check internet connection; increase `--timeout` |
+| Wrong location | Ambiguous city name | Use `"City, Province"` or `"City, CC"` (ISO country code) |
+| `error` class | API failure | Open-Meteo may be temporarily down; widget retries on next interval |
+| Nothing | Module not loaded | Check waybar config and restart waybar |
+
 ## License
 
 MIT
+
+## Related
+
+- [claudebar](https://github.com/mryll/claudebar) -- Claude AI usage widget for Waybar
+- [codexbar](https://github.com/mryll/codexbar) -- OpenAI Codex usage widget for Waybar
+- [logibar](https://github.com/mryll/logibar) -- Logitech battery widgets for Waybar
+- [Waybar](https://github.com/Alexays/Waybar) -- Status bar for Wayland compositors
