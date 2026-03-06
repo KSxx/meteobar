@@ -131,7 +131,7 @@ meteobar emits CSS classes you can use in `style.css`:
 
 ### Theming (Omarchy Users)
 
-Tooltip colors are automatically read from the active [Omarchy](https://github.com/pablopunk/omarchy) theme at `~/.config/omarchy/current/theme/colors.toml` on every execution. On non-Omarchy systems, the One Dark palette is used as fallback.
+Tooltip colors are automatically read from the active [Omarchy](https://github.com/basecamp/omarchy) theme at `~/.config/omarchy/current/theme/colors.toml` on every execution. On non-Omarchy systems, the One Dark palette is used as fallback.
 
 | Tokyo Night | Gruvbox | Catppuccin Latte |
 |:---:|:---:|:---:|
