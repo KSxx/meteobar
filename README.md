@@ -129,6 +129,14 @@ meteobar emits CSS classes you can use in `style.css`:
 | `foggy` | Fog / mist |
 | `error` | Total failure |
 
+### Theming (Omarchy Users)
+
+Tooltip colors are automatically read from the active [Omarchy](https://github.com/pablopunk/omarchy) theme at `~/.config/omarchy/current/theme/colors.toml` on every execution. On non-Omarchy systems, the One Dark palette is used as fallback.
+
+| Tokyo Night | Gruvbox | Catppuccin Latte |
+|:---:|:---:|:---:|
+| ![Tokyo Night](screenshots/tokyo-night.png) | ![Gruvbox](screenshots/gruvbox.png) | ![Catppuccin Latte](screenshots/catppuccin-latte.png) |
+
 ### Example CSS
 
 ```css
@@ -140,14 +148,16 @@ meteobar emits CSS classes you can use in `style.css`:
 
 ### Spacing
 
-Adjust padding and margin to control spacing around the widget:
+Adjust `padding` (space **inside** the widget, between border and content) and `margin` (space **outside** the widget, between the widget and its neighbors) in your `~/.config/waybar/style.css`:
 
 ```css
 #custom-meteobar {
-    padding: 0 8px;
-    margin: 0 4px;
+    padding: 0 8px;   /* top/bottom: 0, left/right: 8px */
+    margin: 0 4px;    /* top/bottom: 0, left/right: 4px */
 }
 ```
+
+Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise). With 2 values: first = top/bottom, second = left/right.
 
 ## Waybar Config Examples
 
@@ -215,8 +225,6 @@ Adjust padding and margin to control spacing around the widget:
 3. Outputs JSON that Waybar consumes (`text`, `tooltip`, `class`, `alt`)
 
 **Note:** The tooltip always uses Nerd Font icons for consistent monospace alignment, regardless of the `--icons` setting. The `--icons` flag controls the bar text only.
-
-**Theming:** Tooltip colors are automatically detected from the active [Omarchy](https://github.com/pablopunk/omarchy) theme (`~/.config/omarchy/current/theme/colors.toml`). When not running on Omarchy, One Dark colors are used as fallback.
 
 ## License
 
