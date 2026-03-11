@@ -7,7 +7,7 @@ A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Met
 
 ![screenshot](screenshot.png)
 
-## Why meteobar?
+### Why meteobar?
 
 | Feature | wttrbar | meteobar |
 |---|---|---|
@@ -18,9 +18,27 @@ A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Met
 | CSS classes | No | Weather-condition based |
 | API key required | No | No |
 
+## Features
+
+- Current conditions with day/night-aware icons
+- Daily and hourly forecast in tooltip
+- Smart geocoding with province/country disambiguation
+- Auto-detect location by IP
+- Multiple icon sets: Nerd Font, Weather Icons, emoji, Font Awesome
+- Template-based format customization
+- CSS classes per weather condition for bar styling
+- Metric and imperial units
+- Written in Rust — fast, single binary, no runtime dependencies
+
+## Requirements
+
+- [Waybar](https://github.com/Alexays/Waybar)
+- A [Nerd Font](https://www.nerdfonts.com/) for icons
+- (Optional) [Font Awesome](https://fontawesome.com/) ≥ 7.0.0 OTF for Font Awesome icon set
+
 ## Installation
 
-### From AUR (Arch Linux)
+### Arch Linux (AUR)
 
 ```bash
 yay -S meteobar
@@ -29,17 +47,30 @@ yay -S meteobar
 ### From source
 
 ```bash
-git clone https://github.com/mryll/meteobar
+git clone https://github.com/mryll/meteobar.git
 cd meteobar
-cargo build --release
-cp target/release/meteobar ~/.local/bin/
+make install PREFIX=~/.local
 ```
 
-## Quick Start
+Or system-wide:
 
-Add to your Waybar config (`~/.config/waybar/config.jsonc`):
+```bash
+sudo make install
+```
+
+To uninstall:
+
+```bash
+make uninstall PREFIX=~/.local
+```
+
+## Quick start
+
+Add to your `~/.config/waybar/config.jsonc`:
 
 ```jsonc
+"modules-right": ["custom/meteobar", ...],
+
 "custom/meteobar": {
     "exec": "meteobar --location 'Buenos Aires'",
     "return-type": "json",
@@ -50,7 +81,9 @@ Add to your Waybar config (`~/.config/waybar/config.jsonc`):
 
 That's it. You'll see something like `󰖐 23°` in your bar with a full forecast tooltip on hover.
 
-## CLI Options
+## Configuration
+
+### CLI options
 
 ```
 meteobar [OPTIONS]
@@ -72,9 +105,9 @@ Options:
   --help                       Print help
 ```
 
-## Template Placeholders
+### Format customization
 
-Use these in `--format`:
+Use `--format` to control the bar text:
 
 | Placeholder | Example | Description |
 |---|---|---|
@@ -91,34 +124,37 @@ Use these in `--format`:
 | `{rain_chance}` | 5 | Today's precipitation probability (%) |
 | `{description}` | Overcast | Weather description |
 
-### Examples
+#### Examples
 
 ```bash
 # Minimal (default)
 meteobar --location "Berlin"
-# Output: 󰖙 23°
+# => 󰖙 23°
 
 # Detailed
 meteobar --location "Berlin" --format "{icon} {temp}° {city} ({description})"
-# Output: 󰖙 23° Berlin (Clear sky)
+# => 󰖙 23° Berlin (Clear sky)
 
 # Temperature range
 meteobar --location "Berlin" --format "{icon} {min}/{max}°"
-# Output: 󰖙 13/26°
+# => 󰖙 13/26°
 
 # Weather Icons (Erik Flowers, filled with day/night variants)
 meteobar --location "Berlin" --icons weather
 
 # Emoji mode
 meteobar --location "Berlin" --icons emoji
-# Output: ☀️ 23°
+# => ☀️ 23°
 
 # Font Awesome (requires otf-font-awesome >= 7.0.0)
 # Icons are automatically wrapped in Pango markup for correct rendering
 meteobar --location "Berlin" --icons fontawesome
 ```
 
-## CSS Classes
+> [!NOTE]
+> The tooltip always uses Nerd Font icons for consistent monospace alignment, regardless of the `--icons` setting. The `--icons` flag controls the bar text only.
+
+### CSS classes
 
 meteobar emits CSS classes you can use in `style.css`:
 
@@ -132,16 +168,6 @@ meteobar emits CSS classes you can use in `style.css`:
 | `foggy` | Fog / mist |
 | `error` | Total failure |
 
-### Theming (Omarchy Users)
-
-Tooltip colors are automatically read from the active [Omarchy](https://github.com/basecamp/omarchy) theme at `~/.config/omarchy/current/theme/colors.toml` on every execution. On non-Omarchy systems, the One Dark palette is used as fallback.
-
-| Tokyo Night | Gruvbox | Catppuccin Latte |
-|:---:|:---:|:---:|
-| ![Tokyo Night](screenshots/tokyo-night.png) | ![Gruvbox](screenshots/gruvbox.png) | ![Catppuccin Latte](screenshots/catppuccin-latte.png) |
-
-### Example CSS
-
 ```css
 #custom-meteobar.clear { color: #e5c07b; }
 #custom-meteobar.rainy { color: #81a1c1; }
@@ -149,33 +175,17 @@ Tooltip colors are automatically read from the active [Omarchy](https://github.c
 #custom-meteobar.stormy { color: #bf616a; }
 ```
 
-### Spacing
+### Theming (Omarchy)
 
-Adjust `padding` (space **inside** the widget, between border and content) and `margin` (space **outside** the widget, between the widget and its neighbors) in your `~/.config/waybar/style.css`:
+Tooltip colors are automatically read from the active [Omarchy](https://github.com/basecamp/omarchy) theme at `~/.config/omarchy/current/theme/colors.toml` on every execution. On non-Omarchy systems, the One Dark palette is used as fallback.
 
-```css
-#custom-meteobar {
-    padding: 0 8px;   /* top/bottom: 0, left/right: 8px */
-    margin: 0 4px;    /* top/bottom: 0, left/right: 4px */
-}
-```
+| Tokyo Night | Gruvbox | Catppuccin Latte |
+|:---:|:---:|:---:|
+| ![Tokyo Night](screenshots/tokyo-night.png) | ![Gruvbox](screenshots/gruvbox.png) | ![Catppuccin Latte](screenshots/catppuccin-latte.png) |
 
-Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise). With 2 values: first = top/bottom, second = left/right.
+### Waybar config examples
 
-## Waybar Config Examples
-
-### Minimal
-
-```jsonc
-"custom/meteobar": {
-    "exec": "meteobar --location 'Tokyo'",
-    "return-type": "json",
-    "interval": 900,
-    "tooltip": true
-}
-```
-
-### With format and emoji
+**With format and emoji:**
 
 ```jsonc
 "custom/meteobar": {
@@ -186,7 +196,7 @@ Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise)
 }
 ```
 
-### Imperial units with hourly forecast
+**Imperial units with hourly forecast:**
 
 ```jsonc
 "custom/meteobar": {
@@ -197,7 +207,7 @@ Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise)
 }
 ```
 
-### Auto-detect location by IP
+**Auto-detect location by IP:**
 
 ```jsonc
 "custom/meteobar": {
@@ -208,7 +218,7 @@ Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise)
 }
 ```
 
-### Location with province/country disambiguation
+**Location with province/country disambiguation:**
 
 ```jsonc
 "custom/meteobar": {
@@ -219,15 +229,24 @@ Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise)
 }
 ```
 
-## How It Works
+### Spacing
+
+Adjust `padding` (inside the widget) and `margin` (outside the widget) in `~/.config/waybar/style.css`:
+
+```css
+#custom-meteobar {
+    padding: 0 8px;
+    margin: 0 4px;
+}
+```
+
+## How it works
 
 1. Resolves location (from `--location`, `--lat/--lon`, or auto-detect by IP via [ipwho.is](https://ipwho.is/))
    - Supports `"City, Province"`, `"City, Country"`, `"City, CC"` (ISO country code) for disambiguation
    - `--location auto` explicitly uses IP geolocation
 2. Fetches weather data from [Open-Meteo](https://open-meteo.com/) (free, no API key)
 3. Outputs JSON that Waybar consumes (`text`, `tooltip`, `class`, `alt`)
-
-**Note:** The tooltip always uses Nerd Font icons for consistent monospace alignment, regardless of the `--icons` setting. The `--icons` flag controls the bar text only.
 
 ## Troubleshooting
 
@@ -237,15 +256,11 @@ Waybar uses standard CSS shorthand order — `top right bottom left` (clockwise)
 | Stale data | API timeout | Check internet connection; increase `--timeout` |
 | Wrong location | Ambiguous city name | Use `"City, Province"` or `"City, CC"` (ISO country code) |
 | `error` class | API failure | Open-Meteo may be temporarily down; widget retries on next interval |
-| Nothing | Module not loaded | Check waybar config and restart waybar |
-
-## License
-
-MIT
+| Nothing | Module not loaded | Check Waybar config and restart Waybar |
 
 ## Related
 
-- [claudebar](https://github.com/mryll/claudebar) -- Claude AI usage widget for Waybar
-- [codexbar](https://github.com/mryll/codexbar) -- OpenAI Codex usage widget for Waybar
-- [logibar](https://github.com/mryll/logibar) -- Logitech battery widgets for Waybar
-- [Waybar](https://github.com/Alexays/Waybar) -- Status bar for Wayland compositors
+- [claudebar](https://github.com/mryll/claudebar) — Claude AI usage widget for Waybar
+- [codexbar](https://github.com/mryll/codexbar) — OpenAI Codex usage widget for Waybar
+- [logibar](https://github.com/mryll/logibar) — Logitech battery widgets for Waybar
+- [Waybar](https://github.com/Alexays/Waybar) — Status bar for Wayland compositors
