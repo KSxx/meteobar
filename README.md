@@ -179,9 +179,9 @@ meteobar emits CSS classes you can use in `style.css`:
 
 Tooltip colors are automatically read from the active [Omarchy](https://github.com/basecamp/omarchy) theme at `~/.config/omarchy/current/theme/colors.toml` on every execution. On non-Omarchy systems, the One Dark palette is used as fallback.
 
-| Tokyo Night | Gruvbox | Catppuccin Latte |
+| Gruvbox | Catppuccin Latte | Everforest |
 |:---:|:---:|:---:|
-| ![Tokyo Night](screenshots/tokyo-night.png) | ![Gruvbox](screenshots/gruvbox.png) | ![Catppuccin Latte](screenshots/catppuccin-latte.png) |
+| ![Gruvbox](screenshots/gruvbox.png) | ![Catppuccin Latte](screenshots/catppuccin-latte.png) | ![Everforest](screenshots/everforest.png) |
 
 ### Waybar config examples
 
