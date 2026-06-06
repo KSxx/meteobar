@@ -1,7 +1,7 @@
 # meteobar
 
 [![AUR version](https://img.shields.io/aur/version/meteobar)](https://aur.archlinux.org/packages/meteobar)
-[![License: MIT](https://img.shields.io/github/license/mryll/meteobar)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Meteo](https://open-meteo.com/). No API key required.
 
