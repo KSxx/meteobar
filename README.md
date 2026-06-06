@@ -5,7 +5,12 @@
 
 A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Meteo](https://open-meteo.com/). No API key required.
 
-![screenshot](screenshot.png)
+![meteobar in Waybar](screenshots/bar.png)
+
+<p align="center">
+  <em>A compact line in your bar — hover for the full forecast:</em><br><br>
+  <img src="screenshot.png" alt="meteobar tooltip" width="320">
+</p>
 
 ### Why meteobar?
 
