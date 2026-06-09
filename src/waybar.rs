@@ -129,6 +129,7 @@ pub fn build_tooltip(
     unit_label: &str,
     colors: &ThemeColors,
     last_fetched: Option<chrono::DateTime<chrono::Local>>,
+    frame: bool,
 ) -> String {
     let current = &data.current;
     let temp = current.temperature_2m.round() as i32;
@@ -220,43 +221,85 @@ pub fn build_tooltip(
     }
     let width = content_width(&measurable).max(title_vlen);
 
-    // Phase 3: Build bordered output
+    // Phase 3: Build output. Framed = box drawn and the whole tooltip pinned to a
+    // complete Mono Nerd Font (text, box-drawing and icons share one advance, so
+    // alignment holds under any bar font). Plain (default) = no border, no pin —
+    // renders in the user's font with nothing aligned to a right edge to break.
+    let row = |content: &str| {
+        if frame {
+            border_line(content, width, c_border)
+        } else {
+            content.to_string()
+        }
+    };
+    let rule = || {
+        if frame {
+            separator(width, c_border, c_dim)
+        } else {
+            fg(c_dim, &"─".repeat(width))
+        }
+    };
+    let gap = || {
+        if frame {
+            empty_line(width, c_border)
+        } else {
+            String::new()
+        }
+    };
+
     let mut lines = Vec::new();
-    lines.push(top_border(width, c_border));
+    if frame {
+        lines.push(top_border(width, c_border));
+    }
 
     let title_pango = bold_fg(c_accent, &title_raw);
-    let left_pad = (width.saturating_sub(title_vlen)) / 2;
-    let padded_title = format!("{}{}", " ".repeat(left_pad), title_pango);
-    lines.push(border_line(&padded_title, width, c_border));
+    if frame {
+        let left_pad = (width.saturating_sub(title_vlen)) / 2;
+        lines.push(border_line(
+            &format!("{}{}", " ".repeat(left_pad), title_pango),
+            width,
+            c_border,
+        ));
+    } else {
+        lines.push(title_pango);
+    }
 
-    lines.push(separator(width, c_border, c_dim));
-    lines.push(border_line(&temp_line, width, c_border));
-    lines.push(empty_line(width, c_border));
-    lines.push(border_line(&stats1, width, c_border));
-    lines.push(border_line(&stats2, width, c_border));
+    lines.push(rule());
+    lines.push(row(&temp_line));
+    lines.push(gap());
+    lines.push(row(&stats1));
+    lines.push(row(&stats2));
 
     if !hourly_lines.is_empty() {
-        lines.push(separator(width, c_border, c_dim));
-        lines.push(border_line(&bold_fg(c_text, "  Hourly"), width, c_border));
-        lines.push(empty_line(width, c_border));
-        for line in &hourly_lines {
-            lines.push(border_line(line, width, c_border));
+        lines.push(rule());
+        lines.push(row(&bold_fg(c_text, "  Hourly")));
+        lines.push(gap());
+        for hl in &hourly_lines {
+            lines.push(row(hl));
         }
     }
 
     if !daily_lines.is_empty() {
-        lines.push(separator(width, c_border, c_dim));
-        lines.push(border_line(&bold_fg(c_text, "  Forecast"), width, c_border));
-        lines.push(empty_line(width, c_border));
-        for line in &daily_lines {
-            lines.push(border_line(line, width, c_border));
+        lines.push(rule());
+        lines.push(row(&bold_fg(c_text, "  Forecast")));
+        lines.push(gap());
+        for dl in &daily_lines {
+            lines.push(row(dl));
         }
     }
 
-    lines.push(separator(width, c_border, c_dim));
-    lines.push(border_line(&updated_line, width, c_border));
-    lines.push(bottom_border(width, c_border));
-    lines.join("\n")
+    lines.push(rule());
+    lines.push(row(&updated_line));
+    if frame {
+        lines.push(bottom_border(width, c_border));
+    }
+
+    let body = lines.join("\n");
+    if frame {
+        format!("<span font_family='JetBrainsMono Nerd Font Mono'>{body}</span>")
+    } else {
+        body
+    }
 }
 
 fn build_daily_lines(
@@ -370,13 +413,9 @@ pub fn error_output(message: &str, colors: &ThemeColors) -> WaybarOutput {
 
     let width = content_width(&[&header, &body]);
 
-    let lines = [
-        top_border(width, &colors.border),
-        border_line(&header, width, &colors.border),
-        separator(width, &colors.border, &colors.dim),
-        border_line(&body, width, &colors.border),
-        bottom_border(width, &colors.border),
-    ];
+    // Plain (no border/pin) so the fallback renders correctly in any font, even
+    // when config parsing failed and the frame preference is unknown.
+    let lines = [header, fg(&colors.dim, &"─".repeat(width)), body];
 
     WaybarOutput {
         text: "?".to_string(),

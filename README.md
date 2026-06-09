@@ -40,7 +40,7 @@ A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Met
 ## Requirements
 
 - [Waybar](https://github.com/Alexays/Waybar)
-- A [Nerd Font](https://www.nerdfonts.com/) for icons
+- A [Nerd Font](https://www.nerdfonts.com/) for icons (recommended; required only for the framed tooltip via `--frame`)
 - (Optional) [Font Awesome](https://fontawesome.com/) ≥ 7.0.0 OTF for Font Awesome icon set
 
 ## Installation
@@ -107,6 +107,8 @@ Options:
   --hours <N>                  Forecast hours in tooltip (0-24) [default: 0]
   --units <UNITS>              Unit system: metric, imperial [default: metric]
   --icons <SET>                Icon set for bar text: nerd, weather, emoji, fontawesome [default: nerd]
+  --frame                      Draw the framed tooltip box (pins JetBrainsMono Nerd Font Mono for
+                               alignment). Off by default: plain, borderless, renders in your font.
   --timeout <SECS>             HTTP timeout in seconds (1-60) [default: 10]
   --version                    Print version
   --help                       Print help
