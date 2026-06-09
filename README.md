@@ -107,8 +107,10 @@ Options:
   --hours <N>                  Forecast hours in tooltip (0-24) [default: 0]
   --units <UNITS>              Unit system: metric, imperial [default: metric]
   --icons <SET>                Icon set for bar text: nerd, weather, emoji, fontawesome [default: nerd]
-  --frame                      Draw the framed tooltip box (pins JetBrainsMono Nerd Font Mono for
-                               alignment). Off by default: plain, borderless, renders in your font.
+  --frame                      Draw the framed tooltip box (pins a Mono Nerd Font for alignment).
+                               Off by default: plain, borderless, renders in your font.
+  --frame-font <NAME>          Font family pinned in framed mode — must be a complete Mono Nerd Font
+                               [default: "JetBrainsMono Nerd Font Mono"]
   --timeout <SECS>             HTTP timeout in seconds (1-60) [default: 10]
   --version                    Print version
   --help                       Print help

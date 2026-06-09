@@ -49,8 +49,11 @@ struct Cli {
     #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u64).range(1..=60))]
     timeout: u64,
 
-    #[arg(long, help = "Draw the framed tooltip box (pins JetBrainsMono Nerd Font Mono for alignment); off = plain, uses your font")]
+    #[arg(long, help = "Draw the framed tooltip box (pins a Mono Nerd Font for alignment); off = plain, uses your font")]
     frame: bool,
+
+    #[arg(long, default_value = "JetBrainsMono Nerd Font Mono", help = "Font family pinned in framed mode — must be a complete Mono Nerd Font")]
+    frame_font: String,
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -225,6 +228,7 @@ fn build_output(
         colors,
         last_fetched,
         cli.frame,
+        &cli.frame_font,
     );
 
     WaybarOutput {

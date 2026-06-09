@@ -130,6 +130,7 @@ pub fn build_tooltip(
     colors: &ThemeColors,
     last_fetched: Option<chrono::DateTime<chrono::Local>>,
     frame: bool,
+    frame_font: &str,
 ) -> String {
     let current = &data.current;
     let temp = current.temperature_2m.round() as i32;
@@ -296,7 +297,10 @@ pub fn build_tooltip(
 
     let body = lines.join("\n");
     if frame {
-        format!("<span font_family='JetBrainsMono Nerd Font Mono'>{body}</span>")
+        format!(
+            "<span font_family='{}'>{body}</span>",
+            pango_escape(frame_font).replace('\'', "&apos;")
+        )
     } else {
         body
     }
