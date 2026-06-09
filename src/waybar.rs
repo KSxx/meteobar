@@ -296,8 +296,8 @@ fn build_daily_lines(
             fg(&colors.text, &icon_info.icon),
             bold_fg(&colors.text, &format!("{:<6}", day_name)),
             fg(&colors.dim, ""),
-            fg(&colors.green, &min.to_string()),
-            fg(&colors.orange, &max.to_string()),
+            fg(&colors.green, &format!("{:>2}", min)),
+            fg(&colors.orange, &format!("{:>2}", max)),
             fg(&colors.dim, unit_label),
             rain_str,
         );
