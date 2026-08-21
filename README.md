@@ -82,6 +82,8 @@ Add this configuration to your `~/.config/waybar/config.jsonc`:
 }
 ```
 
+Run `meteobar --help` for the full reference: the usage line, every flag, and the format placeholders.
+
 Your bar now shows something like `󰖐 23°`. Move the pointer onto the bar to see the full forecast.
 
 <p align="center">
@@ -98,6 +100,7 @@ Your bar now shows something like `󰖐 23°`. Move the pointer onto the bar to 
 
 | Option | Values | Default | Description |
 |---|---|---|---|
+| `--help` | flag | — | Prints the reference — usage, every flag, and the format placeholders — and exits 0. Also `-h` |
 | `--location <NAME>` | city name, or `auto` | auto-detect by IP | `"City"`, `"City, Province"`, or `"City, CC"` |
 | `--lat <FLOAT>` | latitude | — | Requires `--lon` |
 | `--lon <FLOAT>` | longitude | — | Requires `--lat` |
