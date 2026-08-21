@@ -6,7 +6,7 @@
 meteobar is a weather widget for [Waybar](https://github.com/Alexays/Waybar) and the [Omarchy](https://omarchy.org) shell. It gets the data from [Open-Meteo](https://open-meteo.com/), which does not need an API key. meteobar shows the current conditions in your bar, and it gives the hourly and the daily forecast on demand.
 
 <p align="center">
-  <img src="screenshots/omarchy-panel.png" alt="meteobar panel in the Omarchy shell" width="520">
+  <img src="screenshots/omarchy-panel.png" alt="meteobar panel in the Omarchy shell" width="462">
 </p>
 
 ## Why meteobar?
@@ -85,11 +85,11 @@ Add this configuration to your `~/.config/waybar/config.jsonc`:
 Your bar now shows something like `󰖐 23°`. Move the pointer onto the bar to see the full forecast.
 
 <p align="center">
-  <img src="screenshots/waybar-bar.png" alt="meteobar in Waybar" width="800">
+  <img src="screenshots/waybar-bar.png" alt="meteobar in Waybar" width="81">
 </p>
 
 <p align="center">
-  <img src="screenshots/waybar-tooltip.png" alt="meteobar tooltip" width="380">
+  <img src="screenshots/waybar-tooltip.png" alt="meteobar tooltip" width="351">
 </p>
 
 ## Configuration
@@ -184,7 +184,11 @@ meteobar adds a class for the condition, so you can style the bar yourself:
 The repository is also an [Omarchy](https://omarchy.org) shell plugin. The bar shows the condition glyph and the temperature. A click on the bar opens a panel with the current conditions, the next 12 hours, and the next 6 days. A middle-click gets new data. The footer of the panel ends with a refresh control (󰑐), next to the time of the last update. The control stays disabled while a fetch runs.
 
 <p align="center">
-  <img src="screenshots/omarchy-bar.png" alt="meteobar in the Omarchy bar" width="480">
+  <img src="screenshots/omarchy-desktop.png" alt="meteobar in the Omarchy bar, with its panel open" width="960">
+</p>
+
+<p align="center">
+  <img src="screenshots/omarchy-bar.png" alt="meteobar in the Omarchy bar" width="56">
 </p>
 
 The panel shows more than the tooltip can:
@@ -286,7 +290,7 @@ A [`NO_COLOR`](https://no-color.org) environment variable with a value that is n
 meteobar removes the color only. The icons, the box, the alignment, and the bold text all stay. The structured JSON output does not change at all.
 
 <p align="center">
-  <img src="screenshots/waybar-tooltip-mono.png" alt="monochrome tooltip" width="380">
+  <img src="screenshots/waybar-tooltip-mono.png" alt="monochrome tooltip" width="351">
   <img src="screenshots/omarchy-panel-mono.png" alt="monochrome panel" width="380">
 </p>
 
