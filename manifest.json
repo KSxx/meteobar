@@ -30,6 +30,7 @@
         "key": "refreshMinutes",
         "type": "integer",
         "label": "Refresh interval (minutes)",
+        "description": "How often to fetch the forecast. Open-Meteo publishes hourly, so anything under 10 minutes fetches the same numbers again.",
         "min": 1,
         "max": 180,
         "step": 1,
@@ -39,6 +40,7 @@
         "key": "units",
         "type": "enum",
         "label": "Units",
+        "description": "Metric is °C, km/h and mm; imperial is °F, mph and inches. Applies to the bar, the tooltip and the panel at once.",
         "options": [
           "metric",
           "imperial"
@@ -69,9 +71,14 @@
         "key": "colorMode",
         "type": "enum",
         "label": "Colors",
-        "options": ["full", "none", "bar-only", "panel-only"],
+        "options": [
+          "full",
+          "none",
+          "bar-only",
+          "panel-only"
+        ],
         "defaultValue": "full",
-        "description": "Monochrome rendering uses foreground tones only. 'none' drops color everywhere, 'bar-only' keeps it on the bar face, 'panel-only' keeps it in the panel."
+        "description": "Monochrome rendering uses foreground tones only — severity stays readable through the numbers and glyphs. none: no color anywhere. bar-only: colored bar face, plain panel. panel-only: the reverse."
       }
     ]
   }
