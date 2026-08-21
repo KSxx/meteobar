@@ -13,6 +13,14 @@ pub struct FormatData {
     pub description: String,
 }
 
+/// Substitute placeholders into the bar-text template.
+///
+/// Every substituted value is Pango-escaped here, at the boundary, rather than
+/// relying on callers to have escaped first — the bar text is rendered as
+/// markup, and API-supplied strings (the resolved city name above all) must
+/// never be able to open a tag. `{icon}` is the sole exception: the Font
+/// Awesome icon set deliberately carries a `<span font=...>` wrapper.
+/// The template itself is the user's own string and is left alone.
 pub fn render(template: &str, data: &FormatData) -> String {
     let mut result = String::with_capacity(template.len());
     let mut chars = template.chars().peekable();
@@ -30,7 +38,13 @@ pub fn render(template: &str, data: &FormatData) -> String {
             }
             if found_close {
                 match resolve_placeholder(&key, data) {
-                    Some(val) => result.push_str(val),
+                    Some(val) => {
+                        if key == "icon" {
+                            result.push_str(val);
+                        } else {
+                            result.push_str(&crate::waybar::pango_escape(val));
+                        }
+                    }
                     None => {
                         result.push('{');
                         result.push_str(&key);

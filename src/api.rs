@@ -5,7 +5,16 @@ use serde::{Deserialize, Serialize};
 pub struct ResolvedLocation {
     pub lat: f64,
     pub lon: f64,
+    /// Disambiguated display name: "Avellaneda, Buenos Aires, AR". This is what
+    /// proves the geocoder found the place you meant — there is more than one
+    /// Avellaneda — so it stays the default label.
     pub city: String,
+    /// Just the place, with no province or country: "Avellaneda". Published
+    /// alongside the full name so a narrow surface can pick the short form
+    /// instead of eliding the long one. The SPLIT happens here, once, where the
+    /// parts are still separate; a frontend must never re-derive it by cutting
+    /// the display string at a comma.
+    pub short: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -15,10 +24,19 @@ pub struct WeatherData {
     #[serde(default)]
     pub hourly: Option<HourlyForecast>,
     pub timezone: String,
+    /// UTC offset of the location's timezone, used to derive "now" in local
+    /// time when a cache entry predates `current.time`. Optional so caches
+    /// written by older versions still deserialize.
+    #[serde(default)]
+    pub utc_offset_seconds: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CurrentWeather {
+    /// Observation time in the location's timezone ("YYYY-MM-DDTHH:MM").
+    /// Optional so caches written by older versions still deserialize.
+    #[serde(default)]
+    pub time: Option<String>,
     pub temperature_2m: f64,
     pub weather_code: u8,
     pub is_day: u8,
@@ -130,7 +148,12 @@ pub fn geocode(client: &Client, location: &str) -> Result<ResolvedLocation, Stri
     Ok(ResolvedLocation {
         lat: result.latitude,
         lon: result.longitude,
-        city: build_display_name(&result.name, result.admin1.as_deref(), result.country_code.as_deref()),
+        city: build_display_name(
+            &result.name,
+            result.admin1.as_deref(),
+            result.country_code.as_deref(),
+        ),
+        short: result.name.clone(),
     })
 }
 
@@ -154,7 +177,12 @@ pub fn geolocate_ip(client: &Client) -> Result<ResolvedLocation, String> {
     Ok(ResolvedLocation {
         lat: resp.latitude,
         lon: resp.longitude,
-        city: build_display_name(&resp.city, resp.region.as_deref(), resp.country_code.as_deref()),
+        city: build_display_name(
+            &resp.city,
+            resp.region.as_deref(),
+            resp.country_code.as_deref(),
+        ),
+        short: resp.city.clone(),
     })
 }
 
@@ -197,7 +225,11 @@ fn matches_qualifier(result: &GeocodingResult, qualifiers: &[&str]) -> bool {
                 &result.country,
             ]
             .iter()
-            .any(|field| field.as_ref().is_some_and(|v| v.to_lowercase().contains(&t)))
+            .any(|field| {
+                field
+                    .as_ref()
+                    .is_some_and(|v| v.to_lowercase().contains(&t))
+            })
         }
     })
 }

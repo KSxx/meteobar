@@ -3,45 +3,41 @@
 [![AUR version](https://img.shields.io/aur/version/meteobar)](https://aur.archlinux.org/packages/meteobar)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A weather widget for [Waybar](https://github.com/Alexays/Waybar) using [Open-Meteo](https://open-meteo.com/). No API key required.
+meteobar is a weather widget for [Waybar](https://github.com/Alexays/Waybar) and the [Omarchy](https://omarchy.org) shell. It gets the data from [Open-Meteo](https://open-meteo.com/), which does not need an API key. meteobar shows the current conditions in your bar, and it gives the hourly and the daily forecast on demand.
 
 <p align="center">
-  <img src="screenshots/bar.png" alt="meteobar in Waybar" width="800">
+  <img src="screenshots/omarchy-panel.png" alt="meteobar panel in the Omarchy shell" width="520">
 </p>
 
-<p align="center">
-  <em>A compact line in your bar — hover for the full forecast:</em><br><br>
-  <img src="screenshot.png" alt="meteobar tooltip" width="800">
-</p>
-
-### Why meteobar?
+## Why meteobar?
 
 | Feature | wttrbar | meteobar |
 |---|---|---|
-| API reliability | wttr.in (frequent downtime) | Open-Meteo (stable, no limits) |
-| Location disambiguation | None | Smart geocoding (City, Province, Country) |
-| Day/night icons | No | Automatic (current weather) |
+| API reliability | wttr.in, which is often down | Open-Meteo, which is stable and has no request limit |
+| Location disambiguation | None | A province or a country identifies the correct city |
+| Day and night icons | No | Automatic, from the current weather |
 | Format customization | Fixed flags | Template strings with placeholders |
-| CSS classes | No | Weather-condition based |
-| API key required | No | No |
+| CSS classes | No | One class for each weather condition |
+| Omarchy shell panel | No | Yes |
+| API key | Not necessary | Not necessary |
 
 ## Features
 
-- Current conditions with day/night-aware icons
-- Daily and hourly forecast in tooltip
-- Smart geocoding with province/country disambiguation
-- Auto-detect location by IP
-- Multiple icon sets: Nerd Font, Weather Icons, emoji, Font Awesome
-- Template-based format customization
-- CSS classes per weather condition for bar styling
-- Metric and imperial units
-- Written in Rust — fast, single binary, no runtime dependencies
+- Current conditions with day/night aware icons
+- Hourly and daily forecast, in a Waybar tooltip or an Omarchy panel
+- Smart geocoding: a province or a country identifies the correct city
+- Automatic detection of the location by IP
+- Four icon sets: Nerd Font, Weather Icons, emoji, Font Awesome
+- Follows your Omarchy theme, or your pywal palette
+- Monochrome mode for a sober bar
+- Structured JSON output for other frontends
+- Rust code: one binary and no runtime dependencies
 
 ## Requirements
 
-- [Waybar](https://github.com/Alexays/Waybar)
-- A [Nerd Font](https://www.nerdfonts.com/) for icons (recommended; required only for the framed tooltip via `--frame`)
-- (Optional) [Font Awesome](https://fontawesome.com/) ≥ 7.0.0 OTF for Font Awesome icon set
+- [Waybar](https://github.com/Alexays/Waybar), or the Omarchy shell for the plugin
+- A [Nerd Font](https://www.nerdfonts.com/) for the icons
+- (Optional) [Font Awesome](https://fontawesome.com/) 7.0.0 or later for the `fontawesome` icon set
 
 ## Installation
 
@@ -59,13 +55,13 @@ cd meteobar
 make install PREFIX=~/.local
 ```
 
-Or system-wide:
+Or install it system wide:
 
 ```bash
 sudo make install
 ```
 
-To uninstall:
+To remove meteobar:
 
 ```bash
 make uninstall PREFIX=~/.local
@@ -73,111 +69,108 @@ make uninstall PREFIX=~/.local
 
 ## Quick start
 
-Add to your `~/.config/waybar/config.jsonc`:
+Add this configuration to your `~/.config/waybar/config.jsonc`:
 
 ```jsonc
 "modules-right": ["custom/meteobar", ...],
 
 "custom/meteobar": {
-    "exec": "meteobar --location 'Buenos Aires'",
+    "exec": "meteobar --location 'Berlin'",
     "return-type": "json",
     "interval": 900,
     "tooltip": true
 }
 ```
 
-That's it. You'll see something like `󰖐 23°` in your bar with a full forecast tooltip on hover.
+Your bar now shows something like `󰖐 23°`. Move the pointer onto the bar to see the full forecast.
+
+<p align="center">
+  <img src="screenshots/waybar-bar.png" alt="meteobar in Waybar" width="800">
+</p>
+
+<p align="center">
+  <img src="screenshots/waybar-tooltip.png" alt="meteobar tooltip" width="380">
+</p>
 
 ## Configuration
 
-### CLI options
+### Options
 
-```
-meteobar [OPTIONS]
+| Option | Values | Default | Description |
+|---|---|---|---|
+| `--location <NAME>` | city name, or `auto` | auto-detect by IP | `"City"`, `"City, Province"`, or `"City, CC"` |
+| `--lat <FLOAT>` | latitude | — | Requires `--lon` |
+| `--lon <FLOAT>` | longitude | — | Requires `--lat` |
+| `--city-name <NAME>` | text | coordinates | Display name for `--lat`/`--lon` |
+| `--format <TEMPLATE>` | template | `{icon} {temp}°` | Bar text. See the placeholders below |
+| `--tooltip-format <FMT>` | `days`, `hours`, `both` | `days` | What the tooltip lists |
+| `--days <N>` | 1-7 | `3` | Days in the tooltip |
+| `--hours <N>` | 0-24 | `0` | Hours in the tooltip |
+| `--units <UNITS>` | `metric`, `imperial` | `metric` | Unit system |
+| `--icons <SET>` | `nerd`, `weather`, `emoji`, `fontawesome` | `nerd` | Icon set for the bar text |
+| `--frame` | flag | off | Draws the tooltip box, and applies a Mono Nerd Font to align it |
+| `--frame-font <NAME>` | font family | `JetBrainsMono Nerd Font Mono` | Font that `--frame` applies |
+| `--no-color[=<WHAT>]` | `all`, `bar`, `tooltip` | `all` | Drops the colors. See [Monochrome mode](#monochrome-mode) |
+| `--output <FORMAT>` | `waybar`, `json` | `waybar` | Output format. See [Structured JSON](#structured-json-output) |
+| `--timeout <SECS>` | 1-60 | `10` | HTTP timeout |
 
-Options:
-  --location <NAME>            City name, "City, Province", "City, Country", or "auto" for IP geolocation.
-                               Auto-detects by IP if omitted.
-  --lat <FLOAT>                Latitude (requires --lon)
-  --lon <FLOAT>                Longitude (requires --lat)
-  --city-name <NAME>           Display name for the location (used with --lat/--lon)
-  --format <TEMPLATE>          Bar text template [default: "{icon} {temp}°"]
-  --tooltip-format <FORMAT>    Tooltip content: days, hours, both [default: days]
-  --days <N>                   Forecast days in tooltip (1-7) [default: 3]
-  --hours <N>                  Forecast hours in tooltip (0-24) [default: 0]
-  --units <UNITS>              Unit system: metric, imperial [default: metric]
-  --icons <SET>                Icon set for bar text: nerd, weather, emoji, fontawesome [default: nerd]
-  --frame                      Draw the framed tooltip box (pins a Mono Nerd Font for alignment).
-                               Off by default: plain, borderless, renders in your font.
-  --frame-font <NAME>          Font family pinned in framed mode — must be a complete Mono Nerd Font
-                               [default: "JetBrainsMono Nerd Font Mono"]
-  --timeout <SECS>             HTTP timeout in seconds (1-60) [default: 10]
-  --version                    Print version
-  --help                       Print help
-```
-
-### Format customization
+### Format placeholders
 
 Use `--format` to control the bar text:
 
 | Placeholder | Example | Description |
 |---|---|---|
-| `{icon}` | 󰖙 | Weather icon (nerd font or emoji) |
+| `{icon}` | 󰖙 | Weather icon |
 | `{temp}` | 23 | Current temperature |
-| `{feels_like}` | 22 | Feels-like temperature |
-| `{humidity}` | 47 | Humidity percentage |
+| `{feels_like}` | 22 | Apparent temperature |
+| `{humidity}` | 47 | Humidity, in percent |
 | `{wind}` | 9 | Wind speed |
-| `{wind_dir}` | NE | Wind direction (cardinal) |
-| `{pressure}` | 1012 | Atmospheric pressure (hPa) |
-| `{city}` | Buenos Aires | Location name |
-| `{min}` | 13 | Today's minimum temperature |
-| `{max}` | 26 | Today's maximum temperature |
-| `{rain_chance}` | 5 | Today's precipitation probability (%) |
-| `{description}` | Overcast | Weather description |
+| `{wind_dir}` | NE | Wind direction |
+| `{pressure}` | 1012 | Pressure, in hPa |
+| `{city}` | Berlin | Location name |
+| `{min}` | 13 | Minimum temperature today |
+| `{max}` | 26 | Maximum temperature today |
+| `{rain_chance}` | 5 | Probability of rain today, in percent |
+| `{description}` | Overcast | Condition text |
 
-#### Examples
+Examples:
 
 ```bash
-# Minimal (default)
+# Default
 meteobar --location "Berlin"
 # => 󰖙 23°
 
-# Detailed
+# More detail
 meteobar --location "Berlin" --format "{icon} {temp}° {city} ({description})"
 # => 󰖙 23° Berlin (Clear sky)
 
-# Temperature range
+# Today's range
 meteobar --location "Berlin" --format "{icon} {min}/{max}°"
 # => 󰖙 13/26°
 
-# Weather Icons (Erik Flowers, filled with day/night variants)
-meteobar --location "Berlin" --icons weather
+# Hourly forecast in the tooltip
+meteobar --location "Berlin" --tooltip-format both --hours 12
 
-# Emoji mode
-meteobar --location "Berlin" --icons emoji
-# => ☀️ 23°
-
-# Font Awesome (requires otf-font-awesome >= 7.0.0)
-# Icons are automatically wrapped in Pango markup for correct rendering
-meteobar --location "Berlin" --icons fontawesome
+# Disambiguate a city by country
+meteobar --location "Toledo, Spain"
 ```
 
 > [!NOTE]
-> The tooltip always uses Nerd Font icons for consistent monospace alignment, regardless of the `--icons` setting. The `--icons` flag controls the bar text only.
+> The tooltip always uses Nerd Font icons, because they align in a monospace grid. The `--icons` option changes the bar text only.
 
 ### CSS classes
 
-meteobar emits CSS classes you can use in `style.css`:
+meteobar adds a class for the condition, so you can style the bar yourself:
 
 | Class | Condition |
 |---|---|
-| `clear` | Clear sky / mainly clear |
-| `cloudy` | Partly cloudy / overcast |
-| `rainy` | Rain / drizzle |
+| `clear` | Clear sky, or mainly clear |
+| `cloudy` | Partly cloudy, or overcast |
+| `rainy` | Rain, or drizzle |
 | `snowy` | Snow |
 | `stormy` | Thunderstorm |
-| `foggy` | Fog / mist |
-| `error` | Total failure |
+| `foggy` | Fog, or mist |
+| `error` | The fetch failed |
 
 ```css
 #custom-meteobar.clear { color: #e5c07b; }
@@ -186,94 +179,221 @@ meteobar emits CSS classes you can use in `style.css`:
 #custom-meteobar.stormy { color: #bf616a; }
 ```
 
-### Theming (Omarchy)
+## Omarchy shell plugin
 
-Tooltip colors are automatically read from the active [Omarchy](https://github.com/basecamp/omarchy) theme at `~/.config/omarchy/current/theme/colors.toml` on every execution. On non-Omarchy systems, the One Dark palette is used as fallback.
+The repository is also an [Omarchy](https://omarchy.org) shell plugin. The bar shows the condition glyph and the temperature. A click on the bar opens a panel with the current conditions, the next 12 hours, and the next 6 days. A middle-click gets new data. The footer of the panel ends with a refresh control (󰑐), next to the time of the last update. The control stays disabled while a fetch runs.
 
-| Gruvbox | Catppuccin Latte | Everforest |
+<p align="center">
+  <img src="screenshots/omarchy-bar.png" alt="meteobar in the Omarchy bar" width="480">
+</p>
+
+The panel shows more than the tooltip can:
+
+- A hero block with a large glyph, the temperature, the apparent temperature, and the resolved location
+- An hourly strip that tints each temperature by its position between the coldest and the warmest hour in view
+- A daily section where each day is a min-max bar on the range of the whole week
+
+Both frontends read the same forecast. The core selects the entries one time, so "the next 12 hours" means the same thing in the panel and in the tooltip. A night hour also gets its night icon in both frontends.
+
+### Install the plugin
+
+```bash
+make install PREFIX=~/.local   # the meteobar binary must be on your PATH
+make install-omarchy           # links the repository into ~/.config/omarchy/plugins/
+```
+
+Then add the widget to the bar layout in `~/.config/omarchy/shell.json`:
+
+```json
+{
+  "bar": {
+    "layout": {
+      "right": [
+        { "id": "mryll.meteobar" }
+      ]
+    }
+  }
+}
+```
+
+To remove the link: `make uninstall-omarchy`.
+
+> [!IMPORTANT]
+> The shell compiles QML when it starts. After you edit a file in `omarchy/`, run `omarchy restart shell` to see the result. A plugin rescan is not sufficient.
+
+### Settings
+
+Configure these keys in the shell settings window, or in the layout entry in `shell.json`:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `refreshMinutes` | 1-180 | `15` | Minutes between refreshes |
+| `units` | `metric`, `imperial` | `metric` | Unit system |
+| `location` | text | `""` | City name, `City, Province`, or `City, CC`. An empty value detects the location by IP |
+| `iconSet` | `nerd`, `weather`, `emoji`, `fontawesome` | `nerd` | Icon set. `fontawesome` needs otf-font-awesome 7 or later |
+| `colorMode` | `full`, `none`, `bar-only`, `panel-only` | `full` | Where to keep the colors |
+
+## Theming
+
+meteobar reads the colors from your system, in this order:
+
+1. **Omarchy theme** — `$XDG_STATE_HOME/omarchy/current/theme/colors.toml`, which is `~/.local/state/omarchy/current/theme/colors.toml` by default. The old `~/.config/omarchy/current/theme/colors.toml` path still works.
+2. **pywal cache** — `$XDG_CACHE_HOME/wal/colors.json`, which is `~/.cache/wal/colors.json` by default. meteobar reads this file only when there is no Omarchy theme. That one file also covers [pywal16](https://github.com/eylles/pywal16) and the pywal-compatible output of [wallust](https://codeberg.org/explosion-mental/wallust).
+3. **One Dark** — the built-in palette, when there is no theme file.
+
+The panel and the tooltip always agree, because the core resolves the palette and publishes it in the structured JSON. The palette includes the precipitation ramp with its threshold positions. Thus, if the core changes, both frontends change together.
+
+A key can be absent, or can hold a value that is not a `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` color. Then only that one color takes its default value. A partial theme file does not disable the other colors.
+
+The Waybar tooltip follows the same theme:
+
+| Flexoki Light | Rosé Pine | Hackerman |
 |:---:|:---:|:---:|
-| ![Gruvbox](screenshots/gruvbox.png) | ![Catppuccin Latte](screenshots/catppuccin-latte.png) | ![Everforest](screenshots/everforest.png) |
+| ![Flexoki Light](screenshots/waybar-theme-flexoki-light.png) | ![Rosé Pine](screenshots/waybar-theme-rose-pine.png) | ![Hackerman](screenshots/waybar-theme-hackerman.png) |
 
-### Waybar config examples
+| Ristretto | Nord | Kanagawa |
+|:---:|:---:|:---:|
+| ![Ristretto](screenshots/waybar-theme-ristretto.png) | ![Nord](screenshots/waybar-theme-nord.png) | ![Kanagawa](screenshots/waybar-theme-kanagawa.png) |
 
-**With format and emoji:**
+And so does the Omarchy panel:
 
-```jsonc
-"custom/meteobar": {
-    "exec": "meteobar --location 'New York' --icons emoji --format '{icon} {temp}° {description}'",
-    "return-type": "json",
-    "interval": 900,
-    "tooltip": true
-}
+| Flexoki Light | Rosé Pine | Hackerman |
+|:---:|:---:|:---:|
+| ![Flexoki Light](screenshots/omarchy-theme-flexoki-light.png) | ![Rosé Pine](screenshots/omarchy-theme-rose-pine.png) | ![Hackerman](screenshots/omarchy-theme-hackerman.png) |
+
+| Ristretto | Nord | Kanagawa |
+|:---:|:---:|:---:|
+| ![Ristretto](screenshots/omarchy-theme-ristretto.png) | ![Nord](screenshots/omarchy-theme-nord.png) | ![Kanagawa](screenshots/omarchy-theme-kanagawa.png) |
+
+> [!NOTE]
+> **Upgrading?** Two things look different now.
+> Theme detection did not work correctly before: meteobar read the pre-4.x Omarchy path and needed a legacy `color1` key. Thus every tooltip quietly used the built-in palette. Now you get your real theme colors.
+> The tooltip showed the rain probability in three steps, but now it uses a smooth ramp that agrees with the panel.
+
+## Monochrome mode
+
+`--no-color` removes the color markup. The value is optional, so one option covers every combination:
+
+| Command | Bar text | Tooltip |
+|---|---|---|
+| *(none)* | colored | colored |
+| `--no-color` or `--no-color=all` | plain | plain |
+| `--no-color=bar` | plain | colored |
+| `--no-color=tooltip` | colored | plain |
+
+A [`NO_COLOR`](https://no-color.org) environment variable with a value that is not empty does the same as `--no-color=all`. An explicit option on the command line has priority over the environment variable. `--no-color=bar` therefore still paints the tooltip.
+
+meteobar removes the color only. The icons, the box, the alignment, and the bold text all stay. The structured JSON output does not change at all.
+
+<p align="center">
+  <img src="screenshots/waybar-tooltip-mono.png" alt="monochrome tooltip" width="380">
+  <img src="screenshots/omarchy-panel-mono.png" alt="monochrome panel" width="380">
+</p>
+
+Because the CSS classes stay, monochrome mode is also the way to style the bar entirely from your own stylesheet:
+
+```bash
+meteobar --no-color --location "Berlin"
 ```
-
-**Imperial units with hourly forecast:**
-
-```jsonc
-"custom/meteobar": {
-    "exec": "meteobar --location 'London' --units imperial --tooltip-format both --hours 6",
-    "return-type": "json",
-    "interval": 900,
-    "tooltip": true
-}
-```
-
-**Auto-detect location by IP:**
-
-```jsonc
-"custom/meteobar": {
-    "exec": "meteobar --location auto",
-    "return-type": "json",
-    "interval": 900,
-    "tooltip": true
-}
-```
-
-**Location with province/country disambiguation:**
-
-```jsonc
-"custom/meteobar": {
-    "exec": "meteobar --location 'Avellaneda, Buenos Aires'",
-    "return-type": "json",
-    "interval": 900,
-    "tooltip": true
-}
-```
-
-### Spacing
-
-Adjust `padding` (inside the widget) and `margin` (outside the widget) in `~/.config/waybar/style.css`:
 
 ```css
-#custom-meteobar {
-    padding: 0 8px;
-    margin: 0 4px;
+/* your palette, your rules */
+#custom-meteobar { color: #d0d0d0; }
+#custom-meteobar.stormy { color: #bf616a; }
+```
+
+> [!NOTE]
+> The bar text of meteobar never had colors of its own, because Waybar styles it from CSS. `--no-color=bar` therefore has nothing to remove today. The value exists so that the option means the same thing in every widget of the family.
+
+In the Omarchy plugin, the `colorMode` setting does the same. A monochrome panel draws in the foreground color and a dimmed foreground only.
+
+## Structured JSON output
+
+`--output json` prints raw data for other frontends. There is no markup, no color, and no layout, because the frontend decides how to draw the data. The Omarchy plugin reads this format.
+
+```bash
+meteobar --output json --location "Berlin" --days 6 --hours 12
+```
+
+```json
+{
+  "schema_version": 1,
+  "error": null,
+  "location": "Berlin, Berlin, DE",
+  "units": { "temperature": "°C", "wind_speed": "km/h", "pressure": "hPa" },
+  "icon_set": "nerd",
+  "cache": { "fetched_at": "2026-08-20T16:00:00+02:00", "stale": false, "stale_reason": null },
+  "palette": {
+    "text": "#a9b1d6",
+    "dim": "#62667e",
+    "accent": "#7aa2f7",
+    "temp_cold": "#90b9df",
+    "temp_warm": "#df9a90",
+    "precip_ramp": [
+      { "pct": 0, "color": "#9ece6a" },
+      { "pct": 30, "color": "#e0af68" },
+      { "pct": 60, "color": "#7aa2f7" }
+    ]
+  },
+  "current": {
+    "temperature": 23.4,
+    "feels_like": 24.6,
+    "humidity_pct": 58.0,
+    "wind_speed": 14.0,
+    "wind_direction_deg": 225.0,
+    "wind_direction": "SW",
+    "pressure": 1014.0,
+    "precipitation": 0.0,
+    "weather_code": 2,
+    "is_day": true,
+    "icon": "󰖕",
+    "description": "Partly cloudy",
+    "condition": "cloudy"
+  },
+  "hourly": [
+    { "time": "2026-08-20T16:00", "temperature": 24.0, "weather_code": 2, "is_day": true, "icon": "󰖕", "description": "Partly cloudy", "precip_pct": 5 }
+  ],
+  "daily": [
+    { "date": "2026-08-20", "temperature_min": 14.0, "temperature_max": 24.0, "weather_code": 2, "icon": "󰖕", "description": "Partly cloudy", "precip_pct": 10, "sunrise": "2026-08-20T05:56", "sunset": "2026-08-20T20:31" }
+  ]
 }
 ```
+
+Notes on the shape:
+
+- `error` is `null`, or an object with a `message` and an optional `code`.
+- `cache.stale` is `true` when the fetch failed and meteobar served the last data it had. `cache.stale_reason` then gives the cause.
+- `palette` carries the colors the core resolved from your theme. `precip_ramp` gives each stop a position, so a frontend can interpolate between the stops.
+- Both frontends select the same entries: `hourly` starts at the hour in progress, and every entry carries the `is_day` flag that decides its icon.
+
+> [!IMPORTANT]
+> meteobar always exits with code 0 and prints valid JSON, even when the fetch fails or an option is wrong. A bar widget that exits with an error makes a hole in your bar.
 
 ## How it works
 
-1. Resolves location (from `--location`, `--lat/--lon`, or auto-detect by IP via [ipwho.is](https://ipwho.is/))
-   - Supports `"City, Province"`, `"City, Country"`, `"City, CC"` (ISO country code) for disambiguation
-   - `--location auto` explicitly uses IP geolocation
-2. Fetches weather data from [Open-Meteo](https://open-meteo.com/) (free, no API key)
-3. Outputs JSON that Waybar consumes (`text`, `tooltip`, `class`, `alt`)
+1. Resolve the location, from `--location`, from `--lat`/`--lon`, or by IP with [ipwho.is](https://ipwho.is/).
+2. Get the forecast from [Open-Meteo](https://open-meteo.com/), which is free and needs no API key.
+3. Keep the response in the cache for 60 seconds. The cache key holds the location, the units, and the number of days and hours. Thus, two different commands never read the same data.
+4. Print the Waybar JSON, or the structured JSON.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| No output | Location not resolved | Check `--location` spelling, try `"City, Country"` format |
-| Stale data | API timeout | Check internet connection; increase `--timeout` |
-| Wrong location | Ambiguous city name | Use `"City, Province"` or `"City, CC"` (ISO country code) |
-| `error` class | API failure | Open-Meteo may be temporarily down; widget retries on next interval |
-| Nothing | Module not loaded | Check Waybar config and restart Waybar |
+| The bar shows `?` | The fetch failed | Read the tooltip. It gives the error message |
+| The wrong city | The name is ambiguous | Use `"City, Province"` or `"City, CC"` |
+| No output at all | The location did not resolve | Check the spelling, then try `"City, Country"` |
+| Old data | The network is not available | meteobar serves the last forecast it has, and marks it stale in the JSON |
+| Squares instead of icons | No Nerd Font | Install a [Nerd Font](https://www.nerdfonts.com/), or use `--icons emoji` |
+| The tooltip box is ragged | The font is not monospace | Use `--frame`, or drop `--frame` to render in your own font |
+| The panel does not change after you edit a file | The shell holds QML in its cache | Run `omarchy restart shell` |
 
 ## Related
 
 - [claudebar](https://github.com/mryll/claudebar) — Claude AI usage widget for Waybar
 - [codexbar](https://github.com/mryll/codexbar) — OpenAI Codex usage widget for Waybar
 - [logibar](https://github.com/mryll/logibar) — Logitech battery widgets for Waybar
-- [tickerbar](https://github.com/mryll/tickerbar) — Multi-market price ticker for Waybar (crypto, stocks, forex)
-- [Omarchy](https://github.com/basecamp/omarchy) — Beautiful, modern & opinionated Linux distribution
+- [printbar](https://github.com/mryll/printbar) — Printer status widget for Waybar
+- [tickerbar](https://github.com/mryll/tickerbar) — Multi-market price ticker for Waybar
+- [Omarchy](https://github.com/basecamp/omarchy) — Beautiful, modern and opinionated Linux distribution
 - [Waybar](https://github.com/Alexays/Waybar) — Status bar for Wayland compositors

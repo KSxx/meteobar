@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# demo-data — reproducible screenshot fixture for meteobar.
+#
+#   PATH="$PWD/screenshots/demo:$PATH" meteobar --output json
+#
+# It does NOT reimplement meteobar. It seeds a private cache with a fixed
+# Berlin forecast and then execs the REAL binary against it, so every byte of
+# output — both output modes, the theme chain, --no-color, --frame, the
+# argument-error contract — comes from production code. Only the weather is
+# fake, and the dataset is deliberately varied: five condition glyphs across
+# the week, an hourly series crossing sunset so night icons appear, rain
+# chances spanning the whole ramp, and a wide min/max spread so the panel's
+# range bars sit at clearly different offsets.
+#
+# NOT wired into the build, the install target, or the test suite.
+
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+
+# ------------------------------------------------------- locate the real CLI
+# Never this directory, or we would exec ourselves.
+find_real_binary() {
+  if [[ -n "${METEOBAR_BIN:-}" && -x "${METEOBAR_BIN}" ]]; then
+    printf '%s' "$METEOBAR_BIN"; return 0
+  fi
+  local repo_build="$here/../../target/release/meteobar"
+  if [[ -x "$repo_build" ]]; then
+    printf '%s' "$(readlink -f "$repo_build")"; return 0
+  fi
+  local dir candidate
+  while IFS= read -r -d: dir; do
+    [[ -z "$dir" ]] && continue
+    candidate="$dir/meteobar"
+    [[ -x "$candidate" ]] || continue
+    [[ "$(readlink -f "$dir")" == "$here" ]] && continue
+    printf '%s' "$(readlink -f "$candidate")"; return 0
+  done <<< "${PATH}:"
+  return 1
+}
+
+if ! real_binary=$(find_real_binary); then
+  echo "demo-data: cannot find the real meteobar binary." >&2
+  echo "  Build it (cargo build --release) or set METEOBAR_BIN=/path/to/meteobar" >&2
+  exit 1
+fi
+
+# ------------------------------------------ cache key for THIS invocation
+# Mirrors CacheKey/cache_location_descriptor in the core: the request as given,
+# never geocoded. If this ever drifts from the core the binary simply misses the
+# cache and reports a network error — loudly wrong, not silently stale.
+units="metric"; days=3; hours=0
+location=""; lat=""; lon=""; city_name=""
+argv=("$@")
+i=0
+while (( i < ${#argv[@]} )); do
+  case "${argv[$i]}" in
+    --units)      units="${argv[$((i+1))]:-metric}"; i=$((i + 2)) ;;
+    --units=*)    units="${argv[$i]#*=}"; i=$((i + 1)) ;;
+    --days)       days="${argv[$((i+1))]:-3}"; i=$((i + 2)) ;;
+    --days=*)     days="${argv[$i]#*=}"; i=$((i + 1)) ;;
+    --hours)      hours="${argv[$((i+1))]:-0}"; i=$((i + 2)) ;;
+    --hours=*)    hours="${argv[$i]#*=}"; i=$((i + 1)) ;;
+    --location)   location="${argv[$((i+1))]:-}"; i=$((i + 2)) ;;
+    --location=*) location="${argv[$i]#*=}"; i=$((i + 1)) ;;
+    --lat)        lat="${argv[$((i+1))]:-}"; i=$((i + 2)) ;;
+    --lat=*)      lat="${argv[$i]#*=}"; i=$((i + 1)) ;;
+    --lon)        lon="${argv[$((i+1))]:-}"; i=$((i + 2)) ;;
+    --lon=*)      lon="${argv[$i]#*=}"; i=$((i + 1)) ;;
+    --city-name)  city_name="${argv[$((i+1))]:-}"; i=$((i + 2)) ;;
+    --city-name=*) city_name="${argv[$i]#*=}"; i=$((i + 1)) ;;
+    *)            i=$((i + 1)) ;;
+  esac
+done
+
+trimmed="${location#"${location%%[![:space:]]*}"}"
+trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+if [[ -n "$lat" && -n "$lon" ]]; then
+  descriptor="coords:${lat},${lon}|name:${city_name}"
+elif [[ -n "$trimmed" && "${trimmed,,}" != "auto" ]]; then
+  descriptor="loc:${trimmed}"
+else
+  descriptor="auto"
+fi
+canonical="${descriptor}|units:${units}|days:${days}|hours:${hours}"
+
+# FNV-1a 64, matching CacheKey::digest(). Bash arithmetic is 64-bit and wraps,
+# and printf %x renders the two's-complement value, so this lands on the same
+# 16 hex digits the core computes.
+fnv1a64() {
+  local byte
+  local hash=$((0xcbf29ce484222325))
+  while read -r byte; do
+    hash=$(( hash ^ byte ))
+    hash=$(( hash * 0x100000001b3 ))
+  done < <(printf '%s' "$1" | od -An -tu1 -v | tr -s ' ' '\n' | grep -v '^$')
+  printf '%016x' "$hash"
+}
+digest=$(fnv1a64 "$canonical")
+
+# --------------------------------------------------------------- the dataset
+today=$(date +%Y-%m-%d)
+now_stamp=$(date -Iseconds)
+
+# Seven days so any --days works; five distinct glyphs, min/max spread 12..29.
+d_dates=(); for n in 0 1 2 3 4 5 6; do d_dates+=("$(date -d "+$n day" +%Y-%m-%d)"); done
+d_codes=(2 0 80 95 3 1 45)
+d_min=(14 12 16 18 13 15 11)
+d_max=(24 21 22 29 19 26 17)
+d_precip=(10 0 75 90 35 15 5)
+d_sunrise=(05:56 05:58 05:59 06:01 06:03 06:04 06:06)
+d_sunset=(20:31 20:29 20:27 20:25 20:23 20:21 20:19)
+
+# Hourly from 16:00 today for 24 hours. `current.time` is pinned to 16:00 so
+# the core's own "upcoming hours" filter starts there whatever the wall clock
+# says — that is what makes the sunset crossover reproducible.
+h_temps=(24 25 24 22 21 19 18 17 16 16 15 15 14 14 13 13 14 16 18 20 22 23 24 24)
+h_codes=(2  1  2  3  80 95 80 3  2  1  0  0  0  0  45 45 3  2  1  1  2  2  3  80)
+h_precip=(5 5 10 20 45 70 85 60 30 15 10 5  5  5  10 10 15 10 5  5  10 20 35 55)
+
+join() { local IFS=,; printf '%s' "$*"; }
+quote_join() { local out="" sep="" v; for v in "$@"; do out+="${sep}\"${v}\""; sep=","; done; printf '%s' "$out"; }
+
+# The core labels the units but does not convert cached values, so an imperial
+# run needs imperial numbers or the screenshot would read "23°F" on a summer
+# afternoon. Same forecast, converted at the source.
+cur_temp=23.4; cur_feels=24.6; cur_wind=14; cur_pressure=1014
+if [[ "$units" == "imperial" ]]; then
+  to_f()  { awk -v c="$1" 'BEGIN { printf "%.1f", c * 9 / 5 + 32 }'; }
+  to_mph() { awk -v k="$1" 'BEGIN { printf "%d", k * 0.621371 + 0.5 }'; }
+  cur_temp=$(to_f "$cur_temp"); cur_feels=$(to_f "$cur_feels")
+  cur_wind=$(to_mph "$cur_wind")
+  for n in "${!d_min[@]}"; do
+    d_min[$n]=$(to_f "${d_min[$n]}"); d_max[$n]=$(to_f "${d_max[$n]}")
+  done
+  for n in "${!h_temps[@]}"; do h_temps[$n]=$(to_f "${h_temps[$n]}"); done
+fi
+
+h_time_json=()
+for n in "${!h_temps[@]}"; do
+  hour=$(( (16 + n) % 24 ))
+  day_offset=$(( (16 + n) / 24 ))
+  h_time_json+=("$(date -d "+$day_offset day" +%Y-%m-%d)T$(printf '%02d' "$hour"):00")
+done
+
+d_time_json=(); d_sunrise_json=(); d_sunset_json=()
+for n in "${!d_dates[@]}"; do
+  d_time_json+=("${d_dates[$n]}")
+  d_sunrise_json+=("${d_dates[$n]}T${d_sunrise[$n]}")
+  d_sunset_json+=("${d_dates[$n]}T${d_sunset[$n]}")
+done
+
+payload=$(cat <<JSON
+{"weather":{
+  "current":{"time":"${today}T16:00","temperature_2m":${cur_temp},"weather_code":2,"is_day":1,
+    "relative_humidity_2m":58,"apparent_temperature":${cur_feels},"wind_speed_10m":${cur_wind},
+    "wind_direction_10m":225,"pressure_msl":${cur_pressure},"precipitation":0},
+  "daily":{"time":[$(quote_join "${d_time_json[@]}")],
+    "weather_code":[$(join "${d_codes[@]}")],
+    "temperature_2m_max":[$(join "${d_max[@]}")],
+    "temperature_2m_min":[$(join "${d_min[@]}")],
+    "sunrise":[$(quote_join "${d_sunrise_json[@]}")],
+    "sunset":[$(quote_join "${d_sunset_json[@]}")],
+    "precipitation_probability_max":[$(join "${d_precip[@]}")],
+    "wind_speed_10m_max":[18,12,26,34,15,20,10]},
+  "hourly":{"time":[$(quote_join "${h_time_json[@]}")],
+    "temperature_2m":[$(join "${h_temps[@]}")],
+    "weather_code":[$(join "${h_codes[@]}")],
+    "precipitation_probability":[$(join "${h_precip[@]}")]},
+  "timezone":"Europe/Berlin","utc_offset_seconds":7200},
+ "city":"Berlin, Berlin, DE",
+ "params":"${canonical}",
+ "fetched_at":"${now_stamp}"}
+JSON
+)
+
+# ------------------------------------------------- seed the cache and delegate
+cache_root=$(mktemp -d "${TMPDIR:-/tmp}/meteobar-demo.XXXXXX")
+trap 'rm -rf "$cache_root"' EXIT
+mkdir -p "$cache_root/meteobar"
+if command -v jq >/dev/null 2>&1; then
+  printf '%s' "$payload" | jq -c . > "$cache_root/meteobar/weather-${digest}.json"
+else
+  printf '%s' "$payload" > "$cache_root/meteobar/weather-${digest}.json"
+fi
+
+# XDG_CACHE_HOME points the real binary at the seeded cache, so it renders the
+# fixture without touching the network or the user's own cache. Everything else
+# — flags, theme, error contract — is production behavior.
+XDG_CACHE_HOME="$cache_root" exec "$real_binary" "$@"

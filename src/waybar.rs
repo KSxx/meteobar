@@ -1,10 +1,11 @@
 use serde::Serialize;
 use unicode_width::UnicodeWidthStr;
 
-use crate::api::{DailyForecast, HourlyForecast, WeatherData};
+use crate::api::WeatherData;
+use crate::forecast::{self, DaySlot, HourSlot};
 use crate::format::degrees_to_cardinal;
 use crate::icons::{get_icon, IconSet};
-use crate::theme::ThemeColors;
+use crate::theme::{ramp_color, ThemeColors};
 
 #[derive(Serialize)]
 pub struct WaybarOutput {
@@ -29,38 +30,108 @@ pub fn pango_escape(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-fn fg(color: &str, text: &str) -> String {
-    format!("<span foreground='{color}'>{text}</span>")
+/// Which surface(s) `--no-color` applies to. `All` is what a bare
+/// `--no-color` means, and what a non-empty `NO_COLOR` env var requests.
+#[derive(Clone, Copy, PartialEq, Debug, clap::ValueEnum)]
+pub enum NoColorScope {
+    /// Both the bar text and the tooltip (default when no value is given)
+    All,
+    /// Only the bar text
+    Bar,
+    /// Only the tooltip
+    Tooltip,
 }
 
-fn bold_fg(color: &str, text: &str) -> String {
-    format!("<span font_weight='bold' foreground='{color}'>{text}</span>")
+/// Resolved per-surface decision: `true` means that surface keeps its colors.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct ColorChoice {
+    pub bar: bool,
+    pub tooltip: bool,
 }
 
-fn border_line(content: &str, width: usize, border_color: &str) -> String {
+/// Combine the optional `--no-color[=WHAT]` flag with the `NO_COLOR` env var.
+/// An explicit flag always wins — including `--no-color=bar`, which keeps the
+/// tooltip colored even when NO_COLOR is set, because the flag is the more
+/// specific instruction. NO_COLOR counts only when set to a non-empty value
+/// (<https://no-color.org>).
+pub fn resolve_color_choice(flag: Option<NoColorScope>, no_color_env: Option<&str>) -> ColorChoice {
+    match flag {
+        Some(NoColorScope::All) => ColorChoice {
+            bar: false,
+            tooltip: false,
+        },
+        Some(NoColorScope::Bar) => ColorChoice {
+            bar: false,
+            tooltip: true,
+        },
+        Some(NoColorScope::Tooltip) => ColorChoice {
+            bar: true,
+            tooltip: false,
+        },
+        None => {
+            let disabled = no_color_env.is_some_and(|value| !value.is_empty());
+            ColorChoice {
+                bar: !disabled,
+                tooltip: !disabled,
+            }
+        }
+    }
+}
+
+/// Color emission for one surface. Monochrome drops color markup only —
+/// glyphs, box drawing, alignment, and bold are all structural and stay.
+#[derive(Clone, Copy)]
+pub struct Paint {
+    enabled: bool,
+}
+
+impl Paint {
+    pub fn new(enabled: bool) -> Self {
+        Self { enabled }
+    }
+
+    fn fg(&self, color: &str, text: &str) -> String {
+        if self.enabled {
+            format!("<span foreground='{color}'>{text}</span>")
+        } else {
+            text.to_string()
+        }
+    }
+
+    fn bold_fg(&self, color: &str, text: &str) -> String {
+        if self.enabled {
+            format!("<span font_weight='bold' foreground='{color}'>{text}</span>")
+        } else {
+            // Weight is structure, not color: keep it in monochrome.
+            format!("<span font_weight='bold'>{text}</span>")
+        }
+    }
+}
+
+fn border_line(p: Paint, content: &str, width: usize, border_color: &str) -> String {
     let pad = width.saturating_sub(visible_len(content));
     let right_pad = " ".repeat(pad);
     format!(
         "{} {content}{right_pad} {}",
-        fg(border_color, "│"),
-        fg(border_color, "│")
+        p.fg(border_color, "│"),
+        p.fg(border_color, "│")
     )
 }
 
-fn separator(width: usize, border_color: &str, dim_color: &str) -> String {
-    border_line(&fg(dim_color, &"─".repeat(width)), width, border_color)
+fn separator(p: Paint, width: usize, border_color: &str, dim_color: &str) -> String {
+    border_line(p, &p.fg(dim_color, &"─".repeat(width)), width, border_color)
 }
 
-fn empty_line(width: usize, border_color: &str) -> String {
-    border_line(&" ".repeat(width), width, border_color)
+fn empty_line(p: Paint, width: usize, border_color: &str) -> String {
+    border_line(p, &" ".repeat(width), width, border_color)
 }
 
-fn top_border(width: usize, border_color: &str) -> String {
-    fg(border_color, &format!("╭{}╮", "─".repeat(width + 2)))
+fn top_border(p: Paint, width: usize, border_color: &str) -> String {
+    p.fg(border_color, &format!("╭{}╮", "─".repeat(width + 2)))
 }
 
-fn bottom_border(width: usize, border_color: &str) -> String {
-    fg(border_color, &format!("╰{}╯", "─".repeat(width + 2)))
+fn bottom_border(p: Paint, width: usize, border_color: &str) -> String {
+    p.fg(border_color, &format!("╰{}╯", "─".repeat(width + 2)))
 }
 
 fn visible_len(s: &str) -> usize {
@@ -92,16 +163,6 @@ fn visible_len(s: &str) -> usize {
     plain.width()
 }
 
-fn rain_color<'a>(pct: u8, colors: &'a ThemeColors) -> &'a str {
-    if pct >= 60 {
-        &colors.accent
-    } else if pct >= 30 {
-        &colors.yellow
-    } else {
-        &colors.green
-    }
-}
-
 fn rain_icon(icon_set: &IconSet) -> &'static str {
     match icon_set {
         IconSet::Nerd => "󰖗",
@@ -129,8 +190,12 @@ pub fn build_tooltip(
     unit_label: &str,
     colors: &ThemeColors,
     last_fetched: Option<chrono::DateTime<chrono::Local>>,
+    // Some(reason) when the payload is a stale fallback. The freshness footer
+    // names it, exactly as the Omarchy shell panel does.
+    stale_reason: Option<&str>,
     frame: bool,
     frame_font: &str,
+    p: Paint,
 ) -> String {
     let current = &data.current;
     let temp = current.temperature_2m.round() as i32;
@@ -163,53 +228,74 @@ pub fn build_tooltip(
 
     let temp_line = format!(
         "  {} {}  {}  {} {}",
-        fg(c_text, &icon_info.icon),
-        bold_fg(c_accent, &format!("{temp}{unit_label}")),
-        fg(c_dim, icon_info.description),
-        fg(c_dim, "feels"),
-        fg(c_dim, &format!("{feels}{unit_label}"))
+        p.fg(c_text, &icon_info.icon),
+        p.bold_fg(c_accent, &format!("{temp}{unit_label}")),
+        p.fg(c_dim, icon_info.description),
+        p.fg(c_dim, "feels"),
+        p.fg(c_dim, &format!("{feels}{unit_label}"))
     );
 
     let stats1 = format!(
         "  {}  {}{}   {}  {} {} {}",
-        fg(c_accent, "󰖎"),
-        fg(c_text, &humidity.to_string()),
-        fg(c_dim, "%"),
-        fg(c_accent, "󰖝"),
-        fg(c_text, &wind.to_string()),
-        fg(c_dim, speed_unit),
-        fg(c_dim, wind_dir),
+        p.fg(c_accent, "󰖎"),
+        p.fg(c_text, &humidity.to_string()),
+        p.fg(c_dim, "%"),
+        p.fg(c_accent, "󰖝"),
+        p.fg(c_text, &wind.to_string()),
+        p.fg(c_dim, speed_unit),
+        p.fg(c_dim, wind_dir),
     );
 
     let stats2 = format!(
         "  {}  {} {}",
-        fg(c_accent, "󰖏"),
-        fg(c_text, &pressure.to_string()),
-        fg(c_dim, "hPa"),
+        p.fg(c_accent, "󰖏"),
+        p.fg(c_text, &pressure.to_string()),
+        p.fg(c_dim, "hPa"),
     );
 
     let show_days = matches!(tooltip_format, TooltipFormat::Days | TooltipFormat::Both);
     let show_hours = matches!(tooltip_format, TooltipFormat::Hours | TooltipFormat::Both);
 
+    // Selection is shared with the structured output (and so with the panel):
+    // same entries, same daylight, on both surfaces.
     let hourly_lines = if show_hours && hours > 0 {
-        data.hourly
-            .as_ref()
-            .map(|h| build_hourly_lines(h, hours, tooltip_icons, unit_label, colors))
-            .unwrap_or_default()
+        build_hourly_lines(
+            &forecast::upcoming_hours(data, hours),
+            tooltip_icons,
+            unit_label,
+            colors,
+            p,
+        )
     } else {
         Vec::new()
     };
 
     let daily_lines = if show_days {
-        build_daily_lines(&data.daily, days, tooltip_icons, unit_label, colors)
+        build_daily_lines(
+            &forecast::forecast_days(data, days),
+            tooltip_icons,
+            unit_label,
+            colors,
+            p,
+        )
     } else {
         Vec::new()
     };
 
     let updated_time = last_fetched.unwrap_or_else(chrono::Local::now);
+    let stale_suffix = match stale_reason {
+        Some(reason) => format!(" · stale ({reason})"),
+        None => String::new(),
+    };
     let updated_line = format!(
         "  {}",
-        fg(c_dim, &format!("󰅐  Updated {}", updated_time.format("%H:%M"))),
+        p.fg(
+            c_dim,
+            &format!(
+                "󰅐  Updated {}{stale_suffix}",
+                updated_time.format("%H:%M")
+            )
+        ),
     );
 
     // Phase 2: Calculate dynamic width from content
@@ -228,21 +314,21 @@ pub fn build_tooltip(
     // renders in the user's font with nothing aligned to a right edge to break.
     let row = |content: &str| {
         if frame {
-            border_line(content, width, c_border)
+            border_line(p, content, width, c_border)
         } else {
             content.to_string()
         }
     };
     let rule = || {
         if frame {
-            separator(width, c_border, c_dim)
+            separator(p, width, c_border, c_dim)
         } else {
-            fg(c_dim, &"─".repeat(width))
+            p.fg(c_dim, &"─".repeat(width))
         }
     };
     let gap = || {
         if frame {
-            empty_line(width, c_border)
+            empty_line(p, width, c_border)
         } else {
             String::new()
         }
@@ -250,13 +336,14 @@ pub fn build_tooltip(
 
     let mut lines = Vec::new();
     if frame {
-        lines.push(top_border(width, c_border));
+        lines.push(top_border(p, width, c_border));
     }
 
-    let title_pango = bold_fg(c_accent, &title_raw);
+    let title_pango = p.bold_fg(c_accent, &title_raw);
     if frame {
         let left_pad = (width.saturating_sub(title_vlen)) / 2;
         lines.push(border_line(
+            p,
             &format!("{}{}", " ".repeat(left_pad), title_pango),
             width,
             c_border,
@@ -273,7 +360,7 @@ pub fn build_tooltip(
 
     if !hourly_lines.is_empty() {
         lines.push(rule());
-        lines.push(row(&bold_fg(c_text, "  Hourly")));
+        lines.push(row(&p.bold_fg(c_text, "  Hourly")));
         lines.push(gap());
         for hl in &hourly_lines {
             lines.push(row(hl));
@@ -282,7 +369,7 @@ pub fn build_tooltip(
 
     if !daily_lines.is_empty() {
         lines.push(rule());
-        lines.push(row(&bold_fg(c_text, "  Forecast")));
+        lines.push(row(&p.bold_fg(c_text, "  Forecast")));
         lines.push(gap());
         for dl in &daily_lines {
             lines.push(row(dl));
@@ -292,7 +379,7 @@ pub fn build_tooltip(
     lines.push(rule());
     lines.push(row(&updated_line));
     if frame {
-        lines.push(bottom_border(width, c_border));
+        lines.push(bottom_border(p, width, c_border));
     }
 
     let body = lines.join("\n");
@@ -307,100 +394,87 @@ pub fn build_tooltip(
 }
 
 fn build_daily_lines(
-    daily: &DailyForecast,
-    days: u8,
+    days: &[DaySlot],
     icon_set: &IconSet,
     unit_label: &str,
     colors: &ThemeColors,
+    p: Paint,
 ) -> Vec<String> {
-    let count = (days as usize).min(daily.time.len());
-    let mut lines = Vec::new();
+    let ramp = colors.precip_ramp();
+    days.iter()
+        .map(|slot| {
+            let day_name = short_day_name(&slot.date);
+            let icon_info = get_icon(slot.weather_code, true, icon_set);
+            let min = slot.temperature_min.round() as i32;
+            let max = slot.temperature_max.round() as i32;
+            let rain = slot.precip_pct.unwrap_or(0);
 
-    for i in 0..count {
-        let day_name = short_day_name(&daily.time[i]);
-        let icon_info = get_icon(daily.weather_code[i], true, icon_set);
-        let min = daily.temperature_2m_min[i].round() as i32;
-        let max = daily.temperature_2m_max[i].round() as i32;
-        let rain = daily
-            .precipitation_probability_max
-            .get(i)
-            .copied()
-            .unwrap_or(0);
+            let rain_str = if rain > 0 {
+                let rc = ramp_color(&ramp, rain);
+                format!(
+                    "  {}  {}",
+                    p.fg(&rc, rain_icon(icon_set)),
+                    p.fg(&rc, &format!("{rain}%"))
+                )
+            } else {
+                String::new()
+            };
 
-        let rain_str = if rain > 0 {
-            let rc = rain_color(rain, colors);
             format!(
-                "  {}  {}",
-                fg(rc, rain_icon(icon_set)),
-                fg(rc, &format!("{rain}%"))
+                "  {} {}  {} {}/{}{}{}",
+                p.fg(&colors.text, &icon_info.icon),
+                p.bold_fg(&colors.text, &format!("{:<6}", day_name)),
+                p.fg(&colors.dim, ""),
+                p.fg(&colors.temp_cold(), &format!("{:>2}", min)),
+                p.fg(&colors.temp_warm(), &format!("{:>2}", max)),
+                p.fg(&colors.dim, unit_label),
+                rain_str,
             )
-        } else {
-            String::new()
-        };
-
-        let row = format!(
-            "  {} {}  {} {}/{}{}{}",
-            fg(&colors.text, &icon_info.icon),
-            bold_fg(&colors.text, &format!("{:<6}", day_name)),
-            fg(&colors.dim, ""),
-            fg(&colors.green, &format!("{:>2}", min)),
-            fg(&colors.orange, &format!("{:>2}", max)),
-            fg(&colors.dim, unit_label),
-            rain_str,
-        );
-        lines.push(row);
-    }
-    lines
+        })
+        .collect()
 }
 
 fn build_hourly_lines(
-    hourly: &HourlyForecast,
-    hours: u8,
+    hours: &[HourSlot],
     icon_set: &IconSet,
     unit_label: &str,
     colors: &ThemeColors,
+    p: Paint,
 ) -> Vec<String> {
-    let count = (hours as usize).min(hourly.time.len());
-    let mut lines = Vec::new();
+    let ramp = colors.precip_ramp();
+    hours
+        .iter()
+        .map(|slot| {
+            let time_str = slot
+                .time
+                .split('T')
+                .nth(1)
+                .unwrap_or("??:??")
+                .get(..5)
+                .unwrap_or("??:??");
+            // Daylight comes from the shared selection, so a night hour gets
+            // its night glyph here exactly as it does in the panel.
+            let icon_info = get_icon(slot.weather_code, slot.is_day, icon_set);
+            let temp = slot.temperature.round() as i32;
+            let rain = slot.precip_pct.unwrap_or(0);
 
-    for i in 0..count {
-        let time_str = hourly
-            .time
-            .get(i)
-            .map(|t| {
-                t.split('T')
-                    .nth(1)
-                    .unwrap_or("??:??")
-                    .get(..5)
-                    .unwrap_or("??:??")
-            })
-            .unwrap_or("??:??");
-        let icon_info = get_icon(hourly.weather_code[i], true, icon_set);
-        let temp = hourly.temperature_2m[i].round() as i32;
-        let rain = hourly
-            .precipitation_probability
-            .get(i)
-            .copied()
-            .unwrap_or(0);
+            let rain_str = if rain > 0 {
+                format!("  {}", p.fg(&ramp_color(&ramp, rain), &format!("{rain}%")))
+            } else {
+                String::new()
+            };
 
-        let rain_str = if rain > 0 {
-            format!("  {}", fg(rain_color(rain, colors), &format!("{rain}%")))
-        } else {
-            String::new()
-        };
-
-        let row = format!(
-            "  {} {}  {} {}{}{}",
-            fg(&colors.dim, time_str),
-            fg(&colors.text, &icon_info.icon),
-            fg(&colors.dim, ""),
-            fg(&colors.text, &temp.to_string()),
-            fg(&colors.dim, unit_label),
-            rain_str,
-        );
-        lines.push(row);
-    }
-    lines
+            format!(
+                "  {} {}  {} {}{}{}",
+                p.fg(&colors.dim, time_str),
+                p.fg(&colors.text, &icon_info.icon),
+                p.fg(&colors.dim, ""),
+                p.fg(&colors.text, &temp.to_string()),
+                p.fg(&colors.dim, unit_label),
+                rain_str,
+            )
+        })
+        .collect()
 }
 
 fn short_day_name(date_str: &str) -> String {
@@ -411,20 +485,330 @@ fn short_day_name(date_str: &str) -> String {
     }
 }
 
-pub fn error_output(message: &str, colors: &ThemeColors) -> WaybarOutput {
-    let header = bold_fg(&colors.error, "  meteobar error");
-    let body = fg(&colors.dim, &format!("  {}", pango_escape(message)));
+pub fn error_output(message: &str, colors: &ThemeColors, p: Paint) -> WaybarOutput {
+    let header = p.bold_fg(&colors.error, "  meteobar error");
+    let body = p.fg(&colors.dim, &format!("  {}", pango_escape(message)));
 
     let width = content_width(&[&header, &body]);
 
     // Plain (no border/pin) so the fallback renders correctly in any font, even
     // when config parsing failed and the frame preference is unknown.
-    let lines = [header, fg(&colors.dim, &"─".repeat(width)), body];
+    let lines = [header, p.fg(&colors.dim, &"─".repeat(width)), body];
 
     WaybarOutput {
         text: "?".to_string(),
         tooltip: lines.join("\n"),
         class: vec!["error".to_string()],
         alt: "error".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::{CurrentWeather, DailyForecast, HourlyForecast, WeatherData};
+
+    fn colored() -> ColorChoice {
+        ColorChoice {
+            bar: true,
+            tooltip: true,
+        }
+    }
+
+    fn fixture() -> WeatherData {
+        WeatherData {
+            current: CurrentWeather {
+                time: Some("2026-08-20T15:15".into()),
+                temperature_2m: 12.3,
+                weather_code: 3,
+                is_day: 1,
+                relative_humidity_2m: Some(60.0),
+                apparent_temperature: Some(10.1),
+                wind_speed_10m: Some(9.0),
+                wind_direction_10m: Some(40.0),
+                pressure_msl: Some(1012.0),
+                precipitation: Some(0.0),
+            },
+            daily: DailyForecast {
+                time: vec!["2026-08-20".into()],
+                weather_code: vec![61],
+                temperature_2m_max: vec![15.0],
+                temperature_2m_min: vec![8.0],
+                sunrise: vec!["2026-08-20T07:30".into()],
+                sunset: vec!["2026-08-20T18:15".into()],
+                precipitation_probability_max: vec![80],
+                wind_speed_10m_max: vec![20.0],
+            },
+            hourly: Some(HourlyForecast {
+                time: vec!["2026-08-20T15:00".into()],
+                temperature_2m: vec![12.0],
+                weather_code: vec![61],
+                precipitation_probability: vec![70],
+            }),
+            timezone: "UTC".into(),
+            utc_offset_seconds: Some(0),
+        }
+    }
+
+    fn tooltip_with(paint: Paint, frame: bool) -> String {
+        build_tooltip(
+            "Berlin",
+            &fixture(),
+            &TooltipFormat::Both,
+            1,
+            1,
+            "°C",
+            &ThemeColors::default(),
+            None,
+            None,
+            frame,
+            "JetBrainsMono Nerd Font Mono",
+            paint,
+        )
+    }
+
+    // ---- flag / env resolution ------------------------------------------
+
+    #[test]
+    fn no_flag_and_no_env_keeps_every_surface_colored() {
+        assert_eq!(resolve_color_choice(None, None), colored());
+        // NO_COLOR set but empty does not count (no-color.org).
+        assert_eq!(resolve_color_choice(None, Some("")), colored());
+    }
+
+    #[test]
+    fn the_four_states_map_to_the_right_surfaces() {
+        let cases = [
+            (NoColorScope::All, false, false),
+            (NoColorScope::Bar, false, true),
+            (NoColorScope::Tooltip, true, false),
+        ];
+        for (scope, bar, tooltip) in cases {
+            assert_eq!(
+                resolve_color_choice(Some(scope), None),
+                ColorChoice { bar, tooltip },
+                "scope: {scope:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_color_env_behaves_like_no_color_all() {
+        assert_eq!(
+            resolve_color_choice(None, Some("1")),
+            ColorChoice {
+                bar: false,
+                tooltip: false
+            }
+        );
+        // Any non-empty value counts, not just "1".
+        assert_eq!(
+            resolve_color_choice(None, Some("anything")),
+            ColorChoice {
+                bar: false,
+                tooltip: false
+            }
+        );
+    }
+
+    #[test]
+    fn an_explicit_flag_beats_no_color_env() {
+        // --no-color=bar with NO_COLOR set still colors the tooltip: the flag
+        // is the more specific instruction.
+        assert_eq!(
+            resolve_color_choice(Some(NoColorScope::Bar), Some("1")),
+            ColorChoice {
+                bar: false,
+                tooltip: true
+            }
+        );
+        assert_eq!(
+            resolve_color_choice(Some(NoColorScope::Tooltip), Some("1")),
+            ColorChoice {
+                bar: true,
+                tooltip: false
+            }
+        );
+    }
+
+    // ---- what "plain" means ----------------------------------------------
+
+    #[test]
+    fn colored_tooltip_emits_color_markup() {
+        let tooltip = tooltip_with(Paint::new(true), false);
+        assert!(tooltip.contains("foreground='#"));
+        assert!(tooltip.contains("font_weight='bold'"));
+    }
+
+    #[test]
+    fn monochrome_tooltip_has_no_color_markup_but_keeps_structure() {
+        for frame in [false, true] {
+            let tooltip = tooltip_with(Paint::new(false), frame);
+            assert!(
+                !tooltip.contains("foreground="),
+                "color span leaked (frame={frame})"
+            );
+            assert!(!tooltip.contains('#'), "inline hex leaked (frame={frame})");
+
+            // Structure survives: glyphs, rules, bold, and the section labels.
+            assert!(tooltip.contains('󰖗'), "weather glyph lost (frame={frame})");
+            assert!(tooltip.contains("font_weight='bold'"), "bold lost");
+            assert!(tooltip.contains("Berlin"));
+            assert!(tooltip.contains("Hourly") && tooltip.contains("Forecast"));
+            assert!(tooltip.contains('─'), "rule lost (frame={frame})");
+            assert!(tooltip.contains("70%") && tooltip.contains("80%"));
+        }
+        // Framed mode keeps its box drawing and its font pin (a font family,
+        // not a color).
+        let framed = tooltip_with(Paint::new(false), true);
+        assert!(framed.contains('╭') && framed.contains('╯') && framed.contains('│'));
+        assert!(framed.contains("font_family="));
+    }
+
+    #[test]
+    fn monochrome_keeps_the_tooltip_aligned() {
+        // Widths are measured on markup-stripped text, so dropping color must
+        // not change the box geometry.
+        let colored = tooltip_with(Paint::new(true), true);
+        let mono = tooltip_with(Paint::new(false), true);
+        let widths = |s: &str| -> Vec<usize> { s.lines().map(visible_len).collect() };
+        assert_eq!(widths(&colored), widths(&mono));
+    }
+
+    // ---- one selection, two frontends -------------------------------------
+
+    #[test]
+    fn both_frontends_select_the_same_hours_with_the_same_daylight() {
+        let weather = fixture();
+        // What the panel is given.
+        let structured = crate::structured::build(
+            &weather,
+            "Berlin",
+            "Berlin",
+            &crate::structured::Request {
+                days: 1,
+                hours: 3,
+                icon_set: &IconSet::Nerd,
+                imperial: false,
+            },
+            crate::structured::CacheInfo::empty(),
+            &ThemeColors::default(),
+        );
+        // What the tooltip renders.
+        let slots = forecast::upcoming_hours(&weather, 3);
+        let lines = build_hourly_lines(
+            &slots,
+            &IconSet::Nerd,
+            "°C",
+            &ThemeColors::default(),
+            Paint::new(false),
+        );
+
+        assert_eq!(structured.hourly.len(), lines.len());
+        for (entry, line) in structured.hourly.iter().zip(lines.iter()) {
+            // Same hour...
+            assert!(
+                line.contains(&entry.time[11..16]),
+                "tooltip line {line:?} is missing hour {}",
+                &entry.time[11..16]
+            );
+            // ...and the same glyph, which is where day/night used to diverge.
+            assert!(
+                line.contains(&entry.icon),
+                "tooltip line {line:?} is missing glyph {}",
+                entry.icon
+            );
+        }
+    }
+
+    #[test]
+    fn a_night_hour_gets_its_night_glyph_in_the_tooltip() {
+        let mut weather = fixture();
+        // Push "now" past sunset so the first upcoming hour is a night hour.
+        weather.current.time = Some("2026-08-20T19:00".into());
+        if let Some(hourly) = weather.hourly.as_mut() {
+            hourly.time = vec!["2026-08-20T19:00".into()];
+            hourly.temperature_2m = vec![11.0];
+            hourly.weather_code = vec![0]; // clear: day 󰖙 vs night 󰖔
+            hourly.precipitation_probability = vec![0];
+        }
+        let slots = forecast::upcoming_hours(&weather, 1);
+        assert!(!slots[0].is_day);
+        let lines = build_hourly_lines(
+            &slots,
+            &IconSet::Nerd,
+            "°C",
+            &ThemeColors::default(),
+            Paint::new(false),
+        );
+        assert!(
+            lines[0].contains('󰖔'),
+            "expected the night glyph: {lines:?}"
+        );
+        assert!(!lines[0].contains('󰖙'));
+    }
+
+    #[test]
+    fn an_inconsistent_cached_payload_renders_instead_of_panicking() {
+        // Unequal parallel arrays deserialise fine from a cache written by an
+        // older version or a truncated response; the tooltip must survive them.
+        let mut weather = fixture();
+        weather.daily.temperature_2m_min.clear();
+        weather.daily.sunset.clear();
+        if let Some(hourly) = weather.hourly.as_mut() {
+            hourly.temperature_2m.clear();
+        }
+        let tooltip = tooltip_with(Paint::new(true), false);
+        assert!(!tooltip.is_empty());
+
+        let rendered = build_tooltip(
+            "Berlin",
+            &weather,
+            &TooltipFormat::Both,
+            7,
+            24,
+            "°C",
+            &ThemeColors::default(),
+            None,
+            None,
+            false,
+            "JetBrainsMono Nerd Font Mono",
+            Paint::new(true),
+        );
+        assert!(rendered.contains("Berlin"));
+    }
+
+    #[test]
+    fn precipitation_uses_the_published_ramp_on_both_surfaces() {
+        let colors = ThemeColors::default();
+        let ramp = colors.precip_ramp();
+        // The tooltip paints exactly what the ramp resolves for that value.
+        let slots = vec![HourSlot {
+            time: "2026-08-20T15:00".into(),
+            temperature: 12.0,
+            weather_code: 61,
+            is_day: true,
+            precip_pct: Some(45),
+        }];
+        let line = &build_hourly_lines(&slots, &IconSet::Nerd, "°C", &colors, Paint::new(true))[0];
+        assert!(line.contains(&ramp_color(&ramp, 45)));
+    }
+
+    #[test]
+    fn error_output_honors_monochrome_and_keeps_its_class() {
+        let colors = ThemeColors::default();
+        let colored = error_output("boom", &colors, Paint::new(true));
+        let mono = error_output("boom", &colors, Paint::new(false));
+
+        assert!(colored.tooltip.contains("foreground='#"));
+        assert!(!mono.tooltip.contains("foreground="));
+        assert!(!mono.tooltip.contains('#'));
+        assert!(mono.tooltip.contains("meteobar error") && mono.tooltip.contains("boom"));
+
+        // The machine contract is untouched in both cases.
+        assert_eq!(colored.class, vec!["error".to_string()]);
+        assert_eq!(mono.class, colored.class);
+        assert_eq!(mono.alt, colored.alt);
+        assert_eq!(mono.text, colored.text);
     }
 }
