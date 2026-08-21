@@ -11,6 +11,7 @@ Panel {
   id: root
   moduleName: "mryll.meteobar"
   ipcTarget: "mryll.meteobar"
+  manageIpc: false
 
   property var anchorItem: null
 
@@ -96,17 +97,17 @@ Panel {
   // Monochrome rendering: foreground / dimmed foreground only — no accent, no
   // urgent, no thermal ramp. Severity stays readable through text and glyphs,
   // and the structured JSON still carries it for anything scripting on top.
-  readonly property string colorModeSetting: {
+  readonly property string colorMode: {
     var v = String(setting("colorMode", "full"))
     return ["full", "none", "bar-only", "panel-only"].indexOf(v) >= 0 ? v : "full"
   }
-  readonly property bool panelColored: colorModeSetting === "full" || colorModeSetting === "panel-only"
+  readonly property bool panelColored: colorMode === "full" || colorMode === "panel-only"
   // Exposed for the bar face, which in meteobar draws the condition glyph and
   // temperature in the plain bar foreground — there is no accent or ramp on it
   // to drop, so this currently gates nothing. It stays so the four states mean
   // the same thing here as in the sibling widgets, and so anything colored
   // added to the bar face later is gated from the start.
-  readonly property bool barColored: colorModeSetting === "full" || colorModeSetting === "bar-only"
+  readonly property bool barColored: colorMode === "full" || colorMode === "bar-only"
 
   // Refetch when any setting that changes the payload changes.
   readonly property string fetchKey: unitsSetting + "|" + locationSetting + "|" + iconSetSetting
@@ -126,6 +127,21 @@ Panel {
   function toggle() {
     if (root.opened) root.close()
     else root.open()
+  }
+
+  // The shell's base handler covers open/close/show/hide/toggle; this one adds
+  // `refresh` so a keybind or a script can force a fetch without opening the
+  // panel. Overriding means restating the five, so `manageIpc: false` above
+  // turns the base one off and this is the only handler on the target.
+  IpcHandler {
+    target: root.ipcTarget
+
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function refresh(): void { root.refresh() }
   }
 
   // Entrance sweep for the daily range bars: each segment grows from its min
