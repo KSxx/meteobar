@@ -106,11 +106,11 @@ Run `meteobar --help` for the full reference: the usage line, every flag, and th
 Your bar now shows something like `󰖐 23°`. Move the pointer onto the bar to see the full forecast.
 
 <p align="center">
-  <img src="screenshots/waybar-bar.png" alt="meteobar in Waybar" width="81">
+  <img src="screenshots/waybar-bar.png" alt="meteobar in Waybar" width="46">
 </p>
 
 <p align="center">
-  <img src="screenshots/waybar-tooltip.png" alt="meteobar tooltip" width="351">
+  <img src="screenshots/waybar-tooltip.png" alt="meteobar tooltip" width="291">
 </p>
 
 ## Configuration
@@ -206,7 +206,7 @@ meteobar adds a class for the condition, so you can style the bar yourself:
 The repository is also an [Omarchy](https://omarchy.org) shell plugin. The bar shows the condition glyph and the temperature. A click on the bar opens a panel with the current conditions, the next 12 hours, and the next 6 days. A middle-click gets new data. The footer of the panel ends with a refresh control (󰑐), next to the time of the last update. The control stays disabled while a fetch runs.
 
 <p align="center">
-  <img src="screenshots/omarchy-bar.png" alt="meteobar in the Omarchy bar" width="56">
+  <img src="screenshots/omarchy-bar.png" alt="meteobar in the Omarchy bar" width="44">
 </p>
 
 <p align="center">
@@ -342,7 +342,7 @@ A [`NO_COLOR`](https://no-color.org) environment variable with a value that is n
 meteobar removes the color only. The icons, the box, the alignment, and the bold text all stay. The structured JSON output does not change at all.
 
 <p align="center">
-  <img src="screenshots/waybar-tooltip-mono.png" alt="monochrome tooltip" width="351">
+  <img src="screenshots/waybar-tooltip-mono.png" alt="monochrome tooltip" width="291">
   <img src="screenshots/omarchy-panel-mono.png" alt="monochrome panel" width="380">
 </p>
 
