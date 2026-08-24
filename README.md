@@ -113,6 +113,8 @@ Your bar now shows something like `󰖐 23°`. Move the pointer onto the bar to 
   <img src="screenshots/waybar-tooltip.png" alt="meteobar tooltip" width="291">
 </p>
 
+The screenshot shows every section, with `--tooltip-format both --days 4 --hours 6`. The default is `--tooltip-format days`, which gives the forecast alone.
+
 ## Configuration
 
 ### Options
