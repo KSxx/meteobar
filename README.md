@@ -21,6 +21,7 @@ The same core drives both frontends, so a number reads the same on either one:
 - [Configuration](#configuration)
 - [Omarchy shell plugin](#omarchy-shell-plugin)
 - [Theming](#theming)
+- [Tooltip font](#tooltip-font)
 - [Monochrome mode](#monochrome-mode)
 - [Structured JSON output](#structured-json-output)
 - [How it works](#how-it-works)
@@ -129,8 +130,8 @@ Your bar now shows something like `󰖐 23°`. Move the pointer onto the bar to 
 | `--hours <N>` | 0-24 | `0` | Hours in the tooltip |
 | `--units <UNITS>` | `metric`, `imperial` | `metric` | Unit system |
 | `--icons <SET>` | `nerd`, `weather`, `emoji`, `fontawesome` | `nerd` | Icon set for the bar text |
-| `--frame` | flag | off | Draws the tooltip box, and applies a Mono Nerd Font to align it |
-| `--frame-font <NAME>` | font family | `JetBrainsMono Nerd Font Mono` | Font that `--frame` applies |
+| `--tooltip-font <NAME>` | font family or list | `JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace` | The family the tooltip is pinned to. Must be monospace — see [Tooltip font](#tooltip-font) |
+| `--frame`, `--frame-font` | — | — | **DEPRECATED**, still accepted. `--frame` is a no-op; `--frame-font` aliases `--tooltip-font` |
 | `--no-color[=<WHAT>]` | `all`, `bar`, `tooltip` | `all` | Drops the colors. See [Monochrome mode](#monochrome-mode) |
 | `--output <FORMAT>` | `waybar`, `json` | `waybar` | Output format. See [Structured JSON](#structured-json-output) |
 | `--timeout <SECS>` | 1-60 | `10` | HTTP timeout |
@@ -302,6 +303,29 @@ And so does the Omarchy panel:
 > Theme detection did not work correctly before: meteobar read the pre-4.x Omarchy path and needed a legacy `color1` key. Thus every tooltip quietly used the built-in palette. Now you get your real theme colors.
 > The tooltip showed the rain probability in three steps, but now it uses a smooth ramp that agrees with the panel.
 
+## Tooltip font
+
+The tooltip is pinned to a monospace font. That is not decoration: its rules are box-drawing characters, and in a proportional font one of those is nearly twice as wide as a letter. The tooltip then sizes itself to the rules, and a dead margin opens to the right of the text. Waybar draws the tooltip in a GTK window that ignores `font-family` from your CSS, so the markup is the only place this can be said.
+
+The default is a **list** of families, tried in order:
+
+```
+JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace
+```
+
+Pango falls through to the next name when one is not installed. This matters: the Arch package `ttf-jetbrains-mono-nerd` does **not** ship the `…Mono` family, so pinning that one name alone used to fall back to your system's proportional font without saying so.
+
+To use a different font, name any monospace family (or your own list):
+
+```bash
+meteobar --tooltip-font "FiraCode Nerd Font Mono"
+```
+
+> [!NOTE]
+> **`--frame` and `--frame-font` are deprecated.** `--frame` drew the tooltip as a bordered card. It is still accepted, so an existing Waybar config keeps working, but it now does nothing; `--frame-font` is an alias for `--tooltip-font`.
+>
+> The box was a second way of drawing the same content — more code, more documentation, more screenshots — and it only lined up when the pinned font was a complete Mono Nerd Font. Pinning the font on the one remaining tooltip gives the alignment without the box.
+
 ## Monochrome mode
 
 `--no-color` removes the color markup. The value is optional, so one option covers every combination:
@@ -417,7 +441,7 @@ Notes on the shape:
 | No output at all | The location did not resolve | Check the spelling, then try `"City, Country"` |
 | Old data | The network is not available | meteobar serves the last forecast it has, and marks it stale in the JSON |
 | Squares instead of icons | No Nerd Font | Install a [Nerd Font](https://www.nerdfonts.com/), or use `--icons emoji` |
-| The tooltip box is ragged | The font is not monospace | Use `--frame`, or drop `--frame` to render in your own font |
+| The tooltip columns are ragged | The pinned font is not monospace | Name a monospace family with `--tooltip-font`, or leave the default. Render in your own font |
 | The panel does not change after you edit a file | The shell holds QML in its cache | Run `omarchy restart shell` |
 
 ## Related
