@@ -5,9 +5,27 @@
 
 meteobar is a weather widget for [Waybar](https://github.com/Alexays/Waybar) and the [Omarchy](https://omarchy.org) shell. It gets the data from [Open-Meteo](https://open-meteo.com/), which does not need an API key. meteobar shows the current conditions in your bar, and it gives the hourly and the daily forecast on demand.
 
-<p align="center">
-  <img src="screenshots/omarchy-panel.png" alt="meteobar panel in the Omarchy shell" width="462">
-</p>
+The same core drives both frontends, so a number reads the same on either one:
+
+| The Omarchy shell plugin | The Waybar module |
+| :---: | :---: |
+| <img src="screenshots/omarchy-desktop.png" alt="meteobar in the Omarchy shell: the bar face and the forecast panel"> | <img src="screenshots/waybar-desktop.png" alt="meteobar in Waybar: the bar face and the forecast tooltip"> |
+
+## Contents
+
+- [Why meteobar?](#why-meteobar)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Omarchy shell plugin](#omarchy-shell-plugin)
+- [Theming](#theming)
+- [Monochrome mode](#monochrome-mode)
+- [Structured JSON output](#structured-json-output)
+- [How it works](#how-it-works)
+- [Troubleshooting](#troubleshooting)
+- [Related](#related)
 
 ## Why meteobar?
 
@@ -187,11 +205,11 @@ meteobar adds a class for the condition, so you can style the bar yourself:
 The repository is also an [Omarchy](https://omarchy.org) shell plugin. The bar shows the condition glyph and the temperature. A click on the bar opens a panel with the current conditions, the next 12 hours, and the next 6 days. A middle-click gets new data. The footer of the panel ends with a refresh control (󰑐), next to the time of the last update. The control stays disabled while a fetch runs.
 
 <p align="center">
-  <img src="screenshots/omarchy-desktop.png" alt="meteobar in the Omarchy bar, with its panel open" width="960">
+  <img src="screenshots/omarchy-bar.png" alt="meteobar in the Omarchy bar" width="56">
 </p>
 
 <p align="center">
-  <img src="screenshots/omarchy-bar.png" alt="meteobar in the Omarchy bar" width="56">
+  <img src="screenshots/omarchy-panel.png" alt="The meteobar panel: the current conditions and the forecast" width="380">
 </p>
 
 The panel shows more than the tooltip can:
@@ -201,6 +219,13 @@ The panel shows more than the tooltip can:
 - A daily section where each day is a min-max bar on the range of the whole week
 
 Both frontends read the same forecast. The core selects the entries one time, so "the next 12 hours" means the same thing in the panel and in the tooltip. A night hour also gets its night icon in both frontends.
+
+The plugin also answers the shell's IPC, so a keybind or a script can drive it without the mouse:
+
+```bash
+qs ipc call mryll.meteobar toggle    # open or close the panel
+qs ipc call mryll.meteobar refresh   # fetch now, without opening anything
+```
 
 ### Install the plugin
 
@@ -397,10 +422,10 @@ Notes on the shape:
 
 ## Related
 
-- [claudebar](https://github.com/mryll/claudebar) — Claude AI usage widget for Waybar
-- [codexbar](https://github.com/mryll/codexbar) — OpenAI Codex usage widget for Waybar
-- [logibar](https://github.com/mryll/logibar) — Logitech battery widgets for Waybar
-- [printbar](https://github.com/mryll/printbar) — Printer status widget for Waybar
-- [tickerbar](https://github.com/mryll/tickerbar) — Multi-market price ticker for Waybar
-- [Omarchy](https://github.com/basecamp/omarchy) — Beautiful, modern and opinionated Linux distribution
-- [Waybar](https://github.com/Alexays/Waybar) — Status bar for Wayland compositors
+- [claudebar](https://github.com/mryll/claudebar) — Claude AI plan usage
+- [codexbar](https://github.com/mryll/codexbar) — OpenAI Codex subscription usage
+- [logibar](https://github.com/mryll/logibar) — the battery of Logitech devices
+- [printbar](https://github.com/mryll/printbar) — any printer: supplies, trays and queue
+- [tickerbar](https://github.com/mryll/tickerbar) — prices of crypto, stocks, indices, commodities and forex
+- [Omarchy](https://github.com/basecamp/omarchy) — the Linux setup for these widgets
+- [Waybar](https://github.com/Alexays/Waybar) — the status bar for Wayland

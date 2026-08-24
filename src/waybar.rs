@@ -108,32 +108,6 @@ impl Paint {
     }
 }
 
-fn border_line(p: Paint, content: &str, width: usize, border_color: &str) -> String {
-    let pad = width.saturating_sub(visible_len(content));
-    let right_pad = " ".repeat(pad);
-    format!(
-        "{} {content}{right_pad} {}",
-        p.fg(border_color, "│"),
-        p.fg(border_color, "│")
-    )
-}
-
-fn separator(p: Paint, width: usize, border_color: &str, dim_color: &str) -> String {
-    border_line(p, &p.fg(dim_color, &"─".repeat(width)), width, border_color)
-}
-
-fn empty_line(p: Paint, width: usize, border_color: &str) -> String {
-    border_line(p, &" ".repeat(width), width, border_color)
-}
-
-fn top_border(p: Paint, width: usize, border_color: &str) -> String {
-    p.fg(border_color, &format!("╭{}╮", "─".repeat(width + 2)))
-}
-
-fn bottom_border(p: Paint, width: usize, border_color: &str) -> String {
-    p.fg(border_color, &format!("╰{}╯", "─".repeat(width + 2)))
-}
-
 fn visible_len(s: &str) -> usize {
     let mut plain = String::with_capacity(s.len());
     let mut in_tag = false;
@@ -193,8 +167,7 @@ pub fn build_tooltip(
     // Some(reason) when the payload is a stale fallback. The freshness footer
     // names it, exactly as the Omarchy shell panel does.
     stale_reason: Option<&str>,
-    frame: bool,
-    frame_font: &str,
+    tooltip_font: &str,
     p: Paint,
 ) -> String {
     let current = &data.current;
@@ -219,8 +192,7 @@ pub fn build_tooltip(
     let icon_info = get_icon(current.weather_code, current.is_day == 1, tooltip_icons);
     let speed_unit = if unit_label == "°F" { "mph" } else { "km/h" };
 
-    let (c_border, c_text, c_dim, c_accent) =
-        (&colors.border, &colors.text, &colors.dim, &colors.accent);
+    let (c_text, c_dim, c_accent) = (&colors.text, &colors.dim, &colors.accent);
 
     // Phase 1: Build all content strings (without borders)
     let title_raw = pango_escape(city);
@@ -291,10 +263,7 @@ pub fn build_tooltip(
         "  {}",
         p.fg(
             c_dim,
-            &format!(
-                "󰅐  Updated {}{stale_suffix}",
-                updated_time.format("%H:%M")
-            )
+            &format!("󰅐  Updated {}{stale_suffix}", updated_time.format("%H:%M"))
         ),
     );
 
@@ -308,89 +277,48 @@ pub fn build_tooltip(
     }
     let width = content_width(&measurable).max(title_vlen);
 
-    // Phase 3: Build output. Framed = box drawn and the whole tooltip pinned to a
-    // complete Mono Nerd Font (text, box-drawing and icons share one advance, so
-    // alignment holds under any bar font). Plain (default) = no border, no pin —
-    // renders in the user's font with nothing aligned to a right edge to break.
-    let row = |content: &str| {
-        if frame {
-            border_line(p, content, width, c_border)
-        } else {
-            content.to_string()
-        }
-    };
-    let rule = || {
-        if frame {
-            separator(p, width, c_border, c_dim)
-        } else {
-            p.fg(c_dim, &"─".repeat(width))
-        }
-    };
-    let gap = || {
-        if frame {
-            empty_line(p, width, c_border)
-        } else {
-            String::new()
-        }
-    };
+    // Phase 3: Build output.
+    //
+    // One tooltip shape, pinned to a monospace font. The pin is not decoration:
+    // the rules are made of ─, and in a proportional font that character is
+    // nearly twice as wide as a letter — the tooltip then sizes itself to the
+    // rules and grows a dead margin to the right of the text. Waybar draws the
+    // tooltip in a GTK window that IGNORES font-family from CSS, so the markup
+    // is the only place this can be said.
+    let rule = || p.fg(c_dim, &"─".repeat(width));
 
-    let mut lines = Vec::new();
-    if frame {
-        lines.push(top_border(p, width, c_border));
-    }
-
-    let title_pango = p.bold_fg(c_accent, &title_raw);
-    if frame {
-        let left_pad = (width.saturating_sub(title_vlen)) / 2;
-        lines.push(border_line(
-            p,
-            &format!("{}{}", " ".repeat(left_pad), title_pango),
-            width,
-            c_border,
-        ));
-    } else {
-        lines.push(title_pango);
-    }
-
-    lines.push(rule());
-    lines.push(row(&temp_line));
-    lines.push(gap());
-    lines.push(row(&stats1));
-    lines.push(row(&stats2));
+    let mut lines = vec![
+        p.bold_fg(c_accent, &title_raw),
+        rule(),
+        temp_line.clone(),
+        stats1.clone(),
+        stats2.clone(),
+    ];
 
     if !hourly_lines.is_empty() {
         lines.push(rule());
-        lines.push(row(&p.bold_fg(c_text, "  Hourly")));
-        lines.push(gap());
+        lines.push(p.bold_fg(c_text, "  Hourly"));
         for hl in &hourly_lines {
-            lines.push(row(hl));
+            lines.push(hl.clone());
         }
     }
 
     if !daily_lines.is_empty() {
         lines.push(rule());
-        lines.push(row(&p.bold_fg(c_text, "  Forecast")));
-        lines.push(gap());
+        lines.push(p.bold_fg(c_text, "  Forecast"));
         for dl in &daily_lines {
-            lines.push(row(dl));
+            lines.push(dl.clone());
         }
     }
 
     lines.push(rule());
-    lines.push(row(&updated_line));
-    if frame {
-        lines.push(bottom_border(p, width, c_border));
-    }
+    lines.push(updated_line.clone());
 
     let body = lines.join("\n");
-    if frame {
-        format!(
-            "<span font_family='{}'>{body}</span>",
-            pango_escape(frame_font).replace('\'', "&apos;")
-        )
-    } else {
-        body
-    }
+    format!(
+        "<span font_family='{}'>{body}</span>",
+        pango_escape(tooltip_font).replace('\'', "&apos;")
+    )
 }
 
 fn build_daily_lines(
@@ -491,8 +419,8 @@ pub fn error_output(message: &str, colors: &ThemeColors, p: Paint) -> WaybarOutp
 
     let width = content_width(&[&header, &body]);
 
-    // Plain (no border/pin) so the fallback renders correctly in any font, even
-    // when config parsing failed and the frame preference is unknown.
+    // The error fallback stays unpinned: it is one header plus one line, so
+    // there is no column to keep and no rule long enough to overshoot.
     let lines = [header, p.fg(&colors.dim, &"─".repeat(width)), body];
 
     WaybarOutput {
@@ -550,7 +478,7 @@ mod tests {
         }
     }
 
-    fn tooltip_with(paint: Paint, frame: bool) -> String {
+    fn tooltip_with(paint: Paint) -> String {
         build_tooltip(
             "Berlin",
             &fixture(),
@@ -561,8 +489,7 @@ mod tests {
             &ThemeColors::default(),
             None,
             None,
-            frame,
-            "JetBrainsMono Nerd Font Mono",
+            "JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace",
             paint,
         )
     }
@@ -635,42 +562,36 @@ mod tests {
 
     #[test]
     fn colored_tooltip_emits_color_markup() {
-        let tooltip = tooltip_with(Paint::new(true), false);
+        let tooltip = tooltip_with(Paint::new(true));
         assert!(tooltip.contains("foreground='#"));
         assert!(tooltip.contains("font_weight='bold'"));
     }
 
     #[test]
     fn monochrome_tooltip_has_no_color_markup_but_keeps_structure() {
-        for frame in [false, true] {
-            let tooltip = tooltip_with(Paint::new(false), frame);
-            assert!(
-                !tooltip.contains("foreground="),
-                "color span leaked (frame={frame})"
-            );
-            assert!(!tooltip.contains('#'), "inline hex leaked (frame={frame})");
+        let tooltip = tooltip_with(Paint::new(false));
+        assert!(!tooltip.contains("foreground="), "color span leaked");
+        assert!(!tooltip.contains('#'), "inline hex leaked");
 
-            // Structure survives: glyphs, rules, bold, and the section labels.
-            assert!(tooltip.contains('󰖗'), "weather glyph lost (frame={frame})");
-            assert!(tooltip.contains("font_weight='bold'"), "bold lost");
-            assert!(tooltip.contains("Berlin"));
-            assert!(tooltip.contains("Hourly") && tooltip.contains("Forecast"));
-            assert!(tooltip.contains('─'), "rule lost (frame={frame})");
-            assert!(tooltip.contains("70%") && tooltip.contains("80%"));
-        }
-        // Framed mode keeps its box drawing and its font pin (a font family,
-        // not a color).
-        let framed = tooltip_with(Paint::new(false), true);
-        assert!(framed.contains('╭') && framed.contains('╯') && framed.contains('│'));
-        assert!(framed.contains("font_family="));
+        // Structure survives: glyphs, rules, bold, and the section labels.
+        assert!(tooltip.contains('󰖗'), "weather glyph lost");
+        assert!(tooltip.contains("font_weight='bold'"), "bold lost");
+        assert!(tooltip.contains("Berlin"));
+        assert!(tooltip.contains("Hourly") && tooltip.contains("Forecast"));
+        assert!(tooltip.contains('─'), "rule lost");
+        assert!(tooltip.contains("70%") && tooltip.contains("80%"));
+
+        // The font pin is a font family, not a color, so monochrome keeps it —
+        // and it is what keeps the rules the same width as the text.
+        assert!(tooltip.contains("font_family="), "font pin lost");
     }
 
     #[test]
     fn monochrome_keeps_the_tooltip_aligned() {
         // Widths are measured on markup-stripped text, so dropping color must
         // not change the box geometry.
-        let colored = tooltip_with(Paint::new(true), true);
-        let mono = tooltip_with(Paint::new(false), true);
+        let colored = tooltip_with(Paint::new(true));
+        let mono = tooltip_with(Paint::new(false));
         let widths = |s: &str| -> Vec<usize> { s.lines().map(visible_len).collect() };
         assert_eq!(widths(&colored), widths(&mono));
     }
@@ -758,7 +679,7 @@ mod tests {
         if let Some(hourly) = weather.hourly.as_mut() {
             hourly.temperature_2m.clear();
         }
-        let tooltip = tooltip_with(Paint::new(true), false);
+        let tooltip = tooltip_with(Paint::new(true));
         assert!(!tooltip.is_empty());
 
         let rendered = build_tooltip(
@@ -771,8 +692,7 @@ mod tests {
             &ThemeColors::default(),
             None,
             None,
-            false,
-            "JetBrainsMono Nerd Font Mono",
+            "JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace",
             Paint::new(true),
         );
         assert!(rendered.contains("Berlin"));

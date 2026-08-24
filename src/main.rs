@@ -58,18 +58,32 @@ struct Cli {
     #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u64).range(1..=60))]
     timeout: u64,
 
-    #[arg(
-        long,
-        help = "Draw the framed tooltip box (pins a Mono Nerd Font for alignment); off = plain, uses your font"
-    )]
+    /// DEPRECATED, still accepted so an existing Waybar config keeps working.
+    /// It drew a bordered card around the tooltip and now does nothing.
+    #[arg(long, hide = true)]
     frame: bool,
 
+    /// The tooltip is pinned to this family. A Pango family LIST, not one name:
+    /// Pango tries them in order and falls through to the next when one is not
+    /// installed — the Arch package ttf-jetbrains-mono-nerd does NOT ship the
+    /// "…Mono" family, so pinning only that name fell back to the system's
+    /// proportional font without saying so.
+    ///
+    /// It must be monospace: the tooltip's rules are box-drawing characters,
+    /// which in a proportional font render far wider than letters, so the
+    /// tooltip sizes itself to the rules and grows a dead margin to the right
+    /// of the text. Waybar draws the tooltip in a GTK window that ignores
+    /// font-family from CSS, so the markup is the only place to say it.
     #[arg(
         long,
-        default_value = "JetBrainsMono Nerd Font Mono",
-        help = "Font family pinned in framed mode — must be a complete Mono Nerd Font"
+        default_value = "JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace",
+        help = "Font family (or Pango family list) the tooltip is pinned to"
     )]
-    frame_font: String,
+    tooltip_font: String,
+
+    /// DEPRECATED alias for --tooltip-font.
+    #[arg(long, hide = true)]
+    frame_font: Option<String>,
 
     #[arg(long, value_enum, default_value_t = OutputFormat::Waybar, help = "Output format: 'waybar' JSON with a pango tooltip, or raw structured 'json'")]
     output: OutputFormat,
@@ -446,8 +460,7 @@ fn build_output(
         colors,
         last_fetched,
         stale_reason,
-        cli.frame,
-        &cli.frame_font,
+        cli.frame_font.as_deref().unwrap_or(&cli.tooltip_font),
         Paint::new(color_choice.tooltip),
     );
 
