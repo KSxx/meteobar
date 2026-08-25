@@ -478,6 +478,7 @@ Panel {
                 spacing: Style.space(2)
 
                 Text {
+                  textFormat: Text.PlainText
                   id: tempBig
                   text: root.current ? String(Math.round(root.current.temperature)) : ""
                   color: root.fg
@@ -522,6 +523,7 @@ Panel {
                 visible: root.locationName !== ""
 
                 Text {
+                  textFormat: Text.PlainText
                   id: locationMark
                   text: ""  // nf-fa-map_marker
                   color: Qt.darker(root.fg, 1.4)
@@ -568,6 +570,7 @@ Panel {
                 Column {
                   spacing: Style.space(5)
                   Text {
+                    textFormat: Text.PlainText
                     text: "FEELS"
                     color: Qt.darker(root.fg, 1.55)
                     font.family: root.fontFam
@@ -587,6 +590,7 @@ Panel {
                 Column {
                   spacing: Style.space(5)
                   Text {
+                    textFormat: Text.PlainText
                     text: "WIND"
                     color: Qt.darker(root.fg, 1.55)
                     font.family: root.fontFam
@@ -608,6 +612,7 @@ Panel {
                 Column {
                   spacing: Style.space(5)
                   Text {
+                    textFormat: Text.PlainText
                     text: "HUMID"
                     color: Qt.darker(root.fg, 1.55)
                     font.family: root.fontFam
@@ -628,6 +633,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: !root.hasData && root.errorMessage === ""
             text: "Fetching forecast…"
             color: Qt.darker(root.fg, 1.55)
@@ -683,6 +689,7 @@ Panel {
                   font.pixelSize: Style.font.iconLarge
                 }
                 Text {
+                  textFormat: Text.PlainText
                   anchors.horizontalCenter: parent.horizontalCenter
                   text: Math.round(hourCell.modelData.temperature) + "°"
                   color: root.fg
@@ -690,6 +697,7 @@ Panel {
                   font.pixelSize: Style.font.bodySmall
                 }
                 Text {
+                  textFormat: Text.PlainText
                   anchors.horizontalCenter: parent.horizontalCenter
                   // Blank placeholder keeps every column the same height.
                   text: (hourCell.modelData.precip_pct !== null
@@ -761,6 +769,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   x: Style.space(104)
                   anchors.verticalCenter: parent.verticalCenter
                   text: (dayRow.modelData.precip_pct !== null
@@ -773,6 +782,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   anchors.right: parent.right
                   anchors.rightMargin: Style.space(12)
                   anchors.verticalCenter: parent.verticalCenter
@@ -833,6 +843,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   anchors.right: parent.right
                   anchors.rightMargin: Style.space(12) + dayRow.tempColW + dayRow.gap + dayRow.barW + dayRow.gap
                   anchors.verticalCenter: parent.verticalCenter
