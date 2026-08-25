@@ -10,6 +10,8 @@
 
 ## Non-Obvious Rules
 
+- **Quickshell emits NEITHER `started` NOR `exited` when the command does not exist** — `running` just drops back to false. That is the only signal a failed start gives. Anything that waits on `onExited` to leave a loading state hangs for ever when the CLI is not installed, which is the first run of everyone who installs the plugin from the marketplace: the plugin is a git clone, the CLI is a package, and nothing installs the second for you. The `onRunningChanged` guard in the panel's `Process` is what makes the not-installed message reachable — verified against a running shell, not assumed.
+
 - Output must be valid Waybar JSON (`{"text": ..., "tooltip": ..., "class": ..., "alt": ...}`)
 - `--output json` is a second, structured output mode (raw data, no Pango; consumed by the Omarchy shell plugin in `omarchy/`) — it must always exit 0 with valid JSON, errors go in the `error: {message}` field
 - Forecast selection lives ONLY in `forecast.rs` (`upcoming_hours`, `forecast_days`); both the Waybar tooltip and the structured JSON render those slots, so "next N hours" and day/night are identical on both surfaces. Never index the API's parallel arrays — they can disagree in length in a cached payload and that used to panic the Waybar path; zip them instead
