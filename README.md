@@ -232,6 +232,20 @@ qs ipc call mryll.meteobar refresh   # fetch now, without opening anything
 
 ### Install the plugin
 
+From the marketplace, or from this repository directly:
+
+```bash
+omarchy plugin add https://github.com/mryll/meteobar.git --enable
+```
+
+That clones the repository into `~/.config/omarchy/plugins/mryll.meteobar` and
+validates the manifest before it is enabled. To remove it later:
+`omarchy plugin remove mryll.meteobar`.
+
+The plugin runs the `meteobar` binary from your PATH, so install that too — from the AUR (`yay -S meteobar-bin`) or with `make install PREFIX=~/.local`.
+
+For development, link the working copy instead of cloning a second one:
+
 ```bash
 make install PREFIX=~/.local   # the meteobar binary must be on your PATH
 make install-omarchy           # links the repository into ~/.config/omarchy/plugins/
