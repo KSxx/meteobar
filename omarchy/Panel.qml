@@ -218,15 +218,21 @@ Panel {
 
   function finalizeRun() {
     var text = capturedText.trim()
-    if (text === "")
+    if (text === "") {
       // The install hint lives HERE and not in the core, which is where every
       // other message of this family lives. The one message the core cannot
       // emit is the one about its own absence.
-      setError("meteobar produced no output — not installed or not on PATH?\n\n"
-               + "Install it with:  yay -S meteobar-bin\n"
-               + "Then open this panel again.")
-    else
+      //
+      // Only if nothing explained the emptiness already. The StdioCollector
+      // tripwire also leaves capturedText empty, and there "not installed" is
+      // the wrong advice: the binary answered, it answered too much.
+      if (root.errorMessage === "")
+        setError("meteobar produced no output — not installed or not on PATH?\n\n"
+                 + "Install it with:  yay -S meteobar-bin\n"
+                 + "Then open this panel again.")
+    } else {
       handle(text)
+    }
     if (pendingCmd) {
       var c = pendingCmd
       pendingCmd = null
