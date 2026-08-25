@@ -1,5 +1,36 @@
+use std::io::Read;
+
 use reqwest::blocking::Client;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+/// Cap on a single API response body. Both endpoints answer in a few KiB —
+/// clap caps a request at `--days 7 --hours 24` — so this is three orders of
+/// magnitude above anything legitimate, and still bounded.
+const RESPONSE_LIMIT: u64 = 2 * 1024 * 1024;
+
+/// Deserialize a response body without letting it size itself.
+///
+/// `Response::json` buffers the whole body first, and the only bound on that
+/// is whatever the server chooses to send. Nothing between here and the
+/// network is trusted enough for that: DNS, the TLS endpoint, or a proxy can
+/// all answer with a stream that never ends. meteobar runs inside the
+/// long-lived, unsandboxed omarchy-shell process, so an unbounded body is the
+/// shell's memory, not meteobar's.
+///
+/// Reading one byte past the cap is what separates a body that fits from one
+/// that was cut at it. `take` hides the real length, so the message names the
+/// cap rather than a size it cannot know.
+fn read_json_bounded<T: DeserializeOwned>(resp: reqwest::blocking::Response) -> Result<T, String> {
+    let mut buf: Vec<u8> = Vec::new();
+    resp.take(RESPONSE_LIMIT + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("read failed: {e}"))?;
+    if buf.len() as u64 > RESPONSE_LIMIT {
+        return Err(format!("response is larger than {} bytes", RESPONSE_LIMIT));
+    }
+    serde_json::from_slice(&buf).map_err(|e| e.to_string())
+}
 
 #[derive(Debug)]
 pub struct ResolvedLocation {
@@ -123,14 +154,14 @@ pub fn geocode(client: &Client, location: &str) -> Result<ResolvedLocation, Stri
         urlencoding(search_name)
     );
 
-    let resp: GeocodingResponse = client
+    let raw = client
         .get(&url)
         .send()
         .map_err(|e| format!("geocoding request failed: {e}"))?
         .error_for_status()
-        .map_err(|e| format!("geocoding HTTP error: {e}"))?
-        .json()
-        .map_err(|e| format!("geocoding parse failed: {e}"))?;
+        .map_err(|e| format!("geocoding HTTP error: {e}"))?;
+    let resp: GeocodingResponse =
+        read_json_bounded(raw).map_err(|e| format!("geocoding parse failed: {e}"))?;
 
     if resp.results.is_empty() {
         return Err(format!("no results for location '{location}'"));
@@ -159,16 +190,21 @@ pub fn geocode(client: &Client, location: &str) -> Result<ResolvedLocation, Stri
 
 pub fn geolocate_ip(client: &Client) -> Result<ResolvedLocation, String> {
     let geo_client = Client::builder()
+        // Same reason as the main client in main.rs: no legitimate redirect
+        // exists here, so following one only ever hands the destination to
+        // whoever answered. The `unwrap_or_else` below falls back to the main
+        // client, which carries the same policy.
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .unwrap_or_else(|_| client.clone());
 
-    let resp: IpGeoResponse = geo_client
+    let raw = geo_client
         .get("https://ipwho.is/")
         .send()
-        .map_err(|e| format!("IP geolocation failed: {e}"))?
-        .json()
-        .map_err(|e| format!("IP geolocation parse failed: {e}"))?;
+        .map_err(|e| format!("IP geolocation failed: {e}"))?;
+    let resp: IpGeoResponse =
+        read_json_bounded(raw).map_err(|e| format!("IP geolocation parse failed: {e}"))?;
 
     if !resp.success {
         return Err("IP geolocation lookup failed".into());
@@ -280,14 +316,14 @@ pub fn fetch_weather(
         Units::Metric => {}
     }
 
-    let data: WeatherData = client
+    let raw = client
         .get(&url)
         .send()
         .map_err(|e| format!("weather fetch failed: {e}"))?
         .error_for_status()
-        .map_err(|e| format!("weather HTTP error: {e}"))?
-        .json()
-        .map_err(|e| format!("weather parse failed: {e}"))?;
+        .map_err(|e| format!("weather HTTP error: {e}"))?;
+    let data: WeatherData =
+        read_json_bounded(raw).map_err(|e| format!("weather parse failed: {e}"))?;
 
     validate_daily(&data.daily)?;
     if let Some(ref hourly) = data.hourly {

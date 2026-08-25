@@ -87,7 +87,11 @@ impl Cache {
         let meta = fs::metadata(&path).ok()?;
         let age = meta.modified().ok()?.elapsed().unwrap_or(Duration::MAX);
         if age < self.ttl {
-            fs::read_to_string(&path).ok()
+            // A refused entry reads as a cache miss, which is already the
+            // path for a corrupt or absent one: refetch. Nothing here needs to
+            // distinguish "someone put a FIFO in the cache dir" from "no cache
+            // yet" — both mean the network is the only source left.
+            crate::safe_read::read_bounded(&path, crate::safe_read::STATE_LIMIT).ok()
         } else {
             None
         }
@@ -95,7 +99,11 @@ impl Cache {
 
     /// Read stale cache as fallback (any age).
     fn read_stale(&self) -> Option<String> {
-        fs::read_to_string(self.dir.join(&self.file_name)).ok()
+        crate::safe_read::read_bounded(
+            &self.dir.join(&self.file_name),
+            crate::safe_read::STATE_LIMIT,
+        )
+        .ok()
     }
 
     /// Atomically write data to cache.

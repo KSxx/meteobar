@@ -3,6 +3,7 @@ mod cache;
 mod forecast;
 mod format;
 mod icons;
+mod safe_read;
 mod structured;
 mod theme;
 mod waybar;
@@ -118,6 +119,11 @@ fn main() {
         waybar::resolve_color_choice(cli.no_color, std::env::var("NO_COLOR").ok().as_deref());
 
     let client = reqwest::blocking::Client::builder()
+        // Both endpoints answer directly; neither has ever redirected. The
+        // default policy follows up to ten hops and will happily walk from the
+        // https URL compiled in here to plain http on a host nobody chose, so
+        // a redirect is only ever someone else picking the destination.
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(cli.timeout))
         .user_agent(format!("meteobar/{}", env!("CARGO_PKG_VERSION")))
         .build()
