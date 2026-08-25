@@ -164,8 +164,17 @@ impl Cache {
     }
 
     /// Run a fetch function with file-lock serialization and caching.
-    /// Only one process fetches a given request at a time; others wait and
-    /// read cache. Returns the payload plus its freshness metadata.
+    /// Only one process fetches a given request at a time; a second one does
+    /// NOT wait for it — it serves what is already cached. Returns the payload
+    /// plus its freshness metadata.
+    ///
+    /// The wait is what had to go. `lock_exclusive` has no timeout, so one
+    /// process that holds this lock — wedged mid-fetch, stopped under a
+    /// debugger, or simply planted there — stops every later run for ever,
+    /// and this widget runs inside the long-lived omarchy-shell process.
+    /// Refusing to wait costs nothing: whoever holds the lock is fetching the
+    /// same payload, and serving cache without fetching is a path this already
+    /// had for the case where the cache is fresh.
     pub fn fetch_or_cached<F>(&self, fetch_fn: F) -> Result<(String, Freshness), String>
     where
         F: FnOnce() -> Result<String, String>,
@@ -174,14 +183,42 @@ impl Cache {
         let lock_file =
             open_regular_write(&lock_path, false).map_err(|e| format!("lock open failed: {e}"))?;
 
-        lock_file
-            .lock_exclusive()
-            .map_err(|e| format!("lock failed: {e}"))?;
+        // Any error means "not ours to take" and takes the same degraded path:
+        // contention, and anything else the platform reports, are equally
+        // reasons not to fetch and not to block.
+        if lock_file.try_lock_exclusive().is_err() {
+            return self.serve_cached_without_fetching();
+        }
 
         let result = self.fetch_inner(fetch_fn);
 
         lock_file.unlock().ok();
         result
+    }
+
+    /// Another instance holds the lock: return what is on disk, never fetch.
+    fn serve_cached_without_fetching(&self) -> Result<(String, Freshness), String> {
+        if let Some(fresh) = self.read_fresh() {
+            return Ok((
+                fresh,
+                Freshness {
+                    fetched_at: self.last_fetched(),
+                    stale: false,
+                    stale_reason: None,
+                },
+            ));
+        }
+        match self.read_stale() {
+            Some(stale) => Ok((
+                stale,
+                Freshness {
+                    fetched_at: self.last_fetched(),
+                    stale: true,
+                    stale_reason: Some("lock_busy"),
+                },
+            )),
+            None => Err("another instance holds the cache lock".to_string()),
+        }
     }
 
     fn fetch_inner<F>(&self, fetch_fn: F) -> Result<(String, Freshness), String>
@@ -351,6 +388,73 @@ mod tests {
         );
         let err = cache.fetch_or_cached(|| Err("boom".into())).unwrap_err();
         assert_eq!(err, "boom");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The lock is only worth taking if not taking it is survivable. Waiting on
+    /// it is not: this runs inside omarchy-shell, and one holder that never
+    /// lets go used to stop every later run for ever.
+    ///
+    /// The holder here is a second descriptor, not a second process, and that
+    /// is the same conflict: `flock(2)` owns the lock per open file
+    /// description, not per PID, so two independent `open`s contend even from
+    /// one process.
+    ///
+    /// The call under test runs on a thread and reports through a channel, so
+    /// a regression fails this test in seconds instead of hanging the suite.
+    #[cfg(unix)]
+    #[test]
+    fn a_lock_held_by_someone_else_serves_cache_instead_of_waiting() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::mpsc;
+
+        let dir = temp_dir("lock-held");
+        let key = test_key("auto", "metric", 3, 0);
+        let cache = Cache::with_dir(dir.clone(), &key, Duration::ZERO);
+        cache.fetch_or_cached(|| Ok("payload-1".into())).unwrap();
+
+        // Independent open, independent flock owner.
+        let lock_path = dir.join(format!(".weather-{}.json.lock", key.digest()));
+        let holder = open_regular_write(&lock_path, false).unwrap();
+        holder.lock_exclusive().unwrap();
+        assert!(
+            open_regular_write(&lock_path, false)
+                .unwrap()
+                .try_lock_exclusive()
+                .is_err(),
+            "the lock is not actually held — this test would prove nothing"
+        );
+
+        static FETCHED: AtomicBool = AtomicBool::new(false);
+        FETCHED.store(false, Ordering::SeqCst);
+        let (tx, rx) = mpsc::channel();
+        let thread_dir = dir.clone();
+        std::thread::spawn(move || {
+            let cache = Cache::with_dir(
+                thread_dir,
+                &test_key("auto", "metric", 3, 0),
+                Duration::ZERO,
+            );
+            let out = cache.fetch_or_cached(|| {
+                FETCHED.store(true, Ordering::SeqCst);
+                Ok("payload-2".into())
+            });
+            tx.send(out).ok();
+        });
+
+        let got = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("fetch_or_cached blocked on a lock held by someone else");
+        let (data, freshness) = got.unwrap();
+        assert_eq!(data, "payload-1");
+        assert!(freshness.stale);
+        assert_eq!(freshness.stale_reason, Some("lock_busy"));
+        assert!(
+            !FETCHED.load(Ordering::SeqCst),
+            "a run that could not take the lock must not fetch"
+        );
+
+        FileExt::unlock(&holder).ok();
         fs::remove_dir_all(&dir).ok();
     }
 }
