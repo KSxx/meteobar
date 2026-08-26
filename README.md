@@ -60,10 +60,22 @@ The same core drives both frontends, so a number reads the same on either one:
 
 ## Installation
 
+### Omarchy
+
+On [Omarchy](https://omarchy.org), the complete installation is two commands:
+
+```bash
+yay -S meteobar-bin
+omarchy plugin add https://github.com/mryll/meteobar.git --enable
+```
+
+The first command installs the prebuilt binary. The second command installs the bar widget and enables it. Refer to [Omarchy shell plugin](#omarchy-shell-plugin) for the panel and its settings.
+
 ### Arch Linux (AUR)
 
 ```bash
-yay -S meteobar
+yay -S meteobar        # builds from source
+yay -S meteobar-bin    # prebuilt binary
 ```
 
 ### From source
