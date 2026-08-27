@@ -32,7 +32,7 @@ widget contract (exit 0 with valid Waybar JSON on every path) and the AUR rules.
 
 A release is automated by pushing a tag — do NOT build or upload the binary by hand:
 
-1. Bump `version` in `Cargo.toml` + `Cargo.lock` AND in `manifest.json` (the marketplace shows the manifest's version; it must equal the tag); commit `chore: release X.Y.Z` on `develop` and push.
-2. Move master to the release — master only advances here: `git push origin develop:master`. Then `git tag vX.Y.Z && git push origin --tags`.
+1. Merge the work into `master`. In the release commit (`chore: release X.Y.Z`): bump `version` in `Cargo.toml` + `Cargo.lock` AND in `manifest.json` (the marketplace shows the manifest's version; it must equal the tag). Push.
+2. `git tag vX.Y.Z && git push origin --tags`.
 3. The tag push triggers `.github/workflows/release.yml`, which builds and publishes the GitHub release with the asset `meteobar-X.Y.Z-x86_64-linux` (consumed by the `meteobar-bin` AUR package).
 4. Only after the release exists, bump both AUR repos (`aur/meteobar` source + `aur/meteobar-bin`) per the workspace `AGENTS.md`. Order matters: `updpkgsums` fetches the tag tarball AND the release asset, so both must already be live.
