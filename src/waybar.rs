@@ -489,7 +489,7 @@ mod tests {
             &ThemeColors::default(),
             None,
             None,
-            "JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace",
+            "JetBrainsMono Nerd Font, JetBrainsMono Nerd Font Mono, monospace",
             paint,
         )
     }
@@ -692,7 +692,7 @@ mod tests {
             &ThemeColors::default(),
             None,
             None,
-            "JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace",
+            "JetBrainsMono Nerd Font, JetBrainsMono Nerd Font Mono, monospace",
             Paint::new(true),
         );
         assert!(rendered.contains("Berlin"));

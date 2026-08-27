@@ -77,7 +77,7 @@ struct Cli {
     /// font-family from CSS, so the markup is the only place to say it.
     #[arg(
         long,
-        default_value = "JetBrainsMono Nerd Font Mono, JetBrainsMono Nerd Font, monospace",
+        default_value = "JetBrainsMono Nerd Font, JetBrainsMono Nerd Font Mono, monospace",
         help = "Font family (or Pango family list) the tooltip is pinned to"
     )]
     tooltip_font: String,
