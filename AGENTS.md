@@ -1,14 +1,14 @@
 # AGENTS.md — meteobar
 
-Weather widget for Waybar (Rust). See the workspace `AGENTS.md` for the shared
-widget contract (exit 0 with valid Waybar JSON on every path) and the AUR rules.
+Weather widget for Waybar (Rust). Shared family contract: the binary always
+exits 0 with valid Waybar JSON, on every path, errors included.
 
 - Build: `make build`; install: `make install PREFIX=~/.local`. Lint: `cargo clippy`; format: `cargo fmt`.
 - Tests: `cargo test` (unit tests in `src/structured.rs` and `src/cache.rs`).
 
 ## Non-Obvious Rules
 
-- **Quickshell emits NEITHER `started` NOR `exited` when the command does not exist** — `running` just drops back to false. `sawExit` is the discriminator: no `exited` = the run could not start; an `exited` run with empty output is an operational failure, never "not installed".
+- **The CLI always runs through `/bin/sh -c 'exec "$0" "$@"'`, never direct.** A nonexistent binary handed to Quickshell 0.3.1 can abort the whole shell inside the failed start (claudebar#6), before any QML signal fires. The failed-start discriminator is `!sawExit || exitCode === 126 || exitCode === 127` on empty output; any other exited-empty run is an operational failure, never "not installed".
 - **`installCmd` is the one constant** — the message shows it and the button copies it (`Util.execArgv(["wl-copy", ...])`, no shell line, no trailing newline). The button gates on `notInstalled`, never on error text. Pinned in `tests/plugin_qml.rs`.
 
 - Output must be valid Waybar JSON (`{"text": ..., "tooltip": ..., "class": ..., "alt": ...}`)
@@ -28,11 +28,3 @@ widget contract (exit 0 with valid Waybar JSON on every path) and the AUR rules.
 - Theme loading must never panic or error: absent/unreadable/invalid files degrade silently to the next tier, preserving exit 0
 - Font Awesome icons are wrapped in Pango markup (`<span>`) for correct rendering in Waybar
 
-## Release
-
-A release is automated by pushing a tag — do NOT build or upload the binary by hand:
-
-1. Merge the work into `master`. In the release commit (`chore: release X.Y.Z`): bump `version` in `Cargo.toml` + `Cargo.lock` AND in `manifest.json` (the marketplace shows the manifest's version; it must equal the tag). Push.
-2. `git tag vX.Y.Z && git push origin --tags`.
-3. The tag push triggers `.github/workflows/release.yml`, which builds and publishes the GitHub release with the asset `meteobar-X.Y.Z-x86_64-linux` (consumed by the `meteobar-bin` AUR package).
-4. Only after the release exists, bump both AUR repos (`aur/meteobar` source + `aur/meteobar-bin`) per the workspace `AGENTS.md`. Order matters: `updpkgsums` fetches the tag tarball AND the release asset, so both must already be live.
